@@ -5,6 +5,7 @@ import com.yourdomain.survivalplus.managers.ConfigManager
 import com.yourdomain.survivalplus.managers.GUIManager
 import com.yourdomain.survivalplus.managers.ModuleManager
 import com.yourdomain.survivalplus.modules.JoinQuitMessageModule
+import com.yourdomain.survivalplus.modules.VeinMinerModule
 import org.bukkit.plugin.java.JavaPlugin
 
 class SurvivalPlus : JavaPlugin() {
@@ -26,6 +27,7 @@ class SurvivalPlus : JavaPlugin() {
 
         // Register modules
         moduleManager.registerModule(JoinQuitMessageModule(this))
+        moduleManager.registerModule(VeinMinerModule(this))
 
         // Enable modules based on config
         moduleManager.initialModuleToggle()
