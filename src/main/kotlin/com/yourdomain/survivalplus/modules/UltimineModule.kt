@@ -121,10 +121,17 @@ class UltimineModule(private val plugin: SurvivalPlus) : Module, Listener {
             ItemStack(material, totalAmount)
         }
 
-        for (itemStack in condensedDrops) {
-            val leftover = player.inventory.addItem(itemStack)
-            for (item in leftover.values) {
-                player.world.dropItemNaturally(player.location, item)
+        val toolStorageModule = plugin.moduleManager.getModule("tool-storage") as? ToolStorageModule
+        if (toolStorageModule != null && plugin.moduleManager.isModuleEnabled("tool-storage")) {
+            for (itemStack in condensedDrops) {
+                toolStorageModule.addToToolInventory(tool, itemStack)
+            }
+        } else {
+            for (itemStack in condensedDrops) {
+                val leftover = player.inventory.addItem(itemStack)
+                for (item in leftover.values) {
+                    player.world.dropItemNaturally(player.location, item)
+                }
             }
         }
     }
