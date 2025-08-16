@@ -2,6 +2,7 @@ name: SurvivalPlus
 version: 1.0-SNAPSHOT
 main: com.yourdomain.survivalplus.SurvivalPlus
 api-version: '1.20'
+depend: [ProtocolLib]
 authors: [Jules]
 description: A survival enhancing plugin with a modular approach.
 commands:

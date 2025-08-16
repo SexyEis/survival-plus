@@ -1,5 +1,10 @@
 package com.yourdomain.survivalplus.modules
 
+import com.comphenix.protocol.PacketType
+import com.comphenix.protocol.ProtocolLibrary
+import com.comphenix.protocol.events.ListenerPriority
+import com.comphenix.protocol.events.PacketAdapter
+import com.comphenix.protocol.events.PacketEvent
 import com.yourdomain.survivalplus.SurvivalPlus
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
@@ -17,7 +22,6 @@ import org.bukkit.event.Listener
 import org.bukkit.event.block.Action
 import org.bukkit.event.block.BlockBreakEvent
 import org.bukkit.event.player.PlayerInteractEvent
-import org.bukkit.event.player.PlayerSwapHandItemsEvent
 import org.bukkit.inventory.ItemStack
 import org.bukkit.inventory.meta.Damageable
 import java.util.*
@@ -32,16 +36,52 @@ class UltimineModule(private val plugin: SurvivalPlus) : Module, Listener {
     private val playerModes = mutableMapOf<UUID, Mode>()
     private val ultimineActive = mutableMapOf<UUID, Boolean>()
     private val processingBlocks = ThreadLocal.withInitial { mutableSetOf<Block>() }
+    private var lastSlot = mutableMapOf<UUID, Int>()
+
 
     override fun getName(): String = "ultimine"
     override fun getDescription(): String = "Adds ultimate mining capabilities with different modes."
 
     override fun enable() {
         plugin.server.pluginManager.registerEvents(this, plugin)
+        registerPacketListener()
     }
 
     override fun disable() {
         org.bukkit.event.HandlerList.unregisterAll(this)
+        ProtocolLibrary.getProtocolManager().removePacketListeners(plugin)
+    }
+
+    private fun registerPacketListener() {
+        val protocolManager = ProtocolLibrary.getProtocolManager()
+        protocolManager.addPacketListener(object : PacketAdapter(plugin, ListenerPriority.NORMAL, PacketType.Play.Client.HELD_ITEM_SLOT) {
+            override fun onPacketReceiving(event: PacketEvent) {
+                val player = event.player
+                if (player.isSneaking) {
+                    val currentSlot = player.inventory.heldItemSlot
+                    val newSlot = event.packet.integers.read(0)
+                    if (currentSlot == newSlot) return
+
+                    val previousSlot = lastSlot.getOrPut(player.uniqueId) { currentSlot }
+                    var modeOrdinal = getPlayerMode(player).ordinal
+
+                    if (newSlot > previousSlot || (newSlot == 0 && previousSlot == 8)) {
+                        modeOrdinal++
+                    } else if (newSlot < previousSlot || (newSlot == 8 && previousSlot == 0)) {
+                        modeOrdinal--
+                    }
+
+                    if (modeOrdinal < 0) modeOrdinal = Mode.values().size - 1
+                    if (modeOrdinal >= Mode.values().size) modeOrdinal = 0
+
+                    val nextMode = Mode.values()[modeOrdinal]
+
+                    setPlayerMode(player, nextMode)
+                    player.sendActionBar(Component.text("Mode: ", NamedTextColor.GRAY).append(Component.text(nextMode.name, NamedTextColor.GREEN)))
+                    lastSlot[player.uniqueId] = newSlot
+                }
+            }
+        })
     }
 
     private fun getPlayerMode(player: Player): Mode = playerModes.getOrPut(player.uniqueId) { Mode.NORMAL }
@@ -54,18 +94,6 @@ class UltimineModule(private val plugin: SurvivalPlus) : Module, Listener {
         val newState = !isUltimineActive(player)
         ultimineActive[player.uniqueId] = newState
         return newState
-    }
-
-    @EventHandler
-    fun onPlayerSwapHandItems(event: PlayerSwapHandItemsEvent) {
-        val player = event.player
-        if (player.isSneaking) {
-            event.isCancelled = true // Prevent swapping items
-            val currentMode = getPlayerMode(player)
-            val nextMode = Mode.values()[(currentMode.ordinal + 1) % Mode.values().size]
-            setPlayerMode(player, nextMode)
-            player.sendActionBar(Component.text("Mode: ", NamedTextColor.GRAY).append(Component.text(nextMode.name, NamedTextColor.GREEN)))
-        }
     }
 
     @EventHandler
