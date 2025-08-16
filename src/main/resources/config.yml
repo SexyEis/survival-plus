@@ -35,6 +35,8 @@ modules:
       - "DEEPSLATE_EMERALD_ORE"
       - "NETHER_GOLD_ORE"
       - "NETHER_QUARTZ_ORE"
+  tool-storage:
+    enabled: true
   ultimine:
     enabled: true
     # The maximum number of blocks that can be broken at once by the ultimine module.
