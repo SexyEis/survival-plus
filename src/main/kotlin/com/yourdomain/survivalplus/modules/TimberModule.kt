@@ -160,8 +160,8 @@ class TimberModule(private val plugin: SurvivalPlus) : Module, Listener {
             }
         }
 
-        // Find all leaves within 6 blocks of any log
-        val leafSearchRadius = 6
+        // Find all leaves within a configured radius of any log
+        val leafSearchRadius = plugin.config.getInt("modules.timber.leaf-search-radius", 6)
         for (log in logs) {
             for (x in -leafSearchRadius..leafSearchRadius) {
                 for (y in -leafSearchRadius..leafSearchRadius) {

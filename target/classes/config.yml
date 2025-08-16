@@ -35,10 +35,16 @@ modules:
       - "DEEPSLATE_EMERALD_ORE"
       - "NETHER_GOLD_ORE"
       - "NETHER_QUARTZ_ORE"
+  ultimine:
+    enabled: true
+    # The maximum number of blocks that can be broken at once by the ultimine module.
+    max-blocks: 64
   timber:
     enabled: true
     # The maximum number of logs that can be chopped at once.
-    max-logs: 256
+    max-logs: 512
+    # The radius to search for leaves around logs.
+    leaf-search-radius: 10
     # The list of blocks considered logs.
     log-types:
       - "ACACIA_LOG"
