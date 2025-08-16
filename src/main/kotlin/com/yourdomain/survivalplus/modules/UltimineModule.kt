@@ -58,6 +58,8 @@ class UltimineModule(private val plugin: SurvivalPlus) : Module, Listener {
             override fun onPacketReceiving(event: PacketEvent) {
                 val player = event.player
                 if (player.isSneaking) {
+                    event.isCancelled = true
+
                     val currentSlot = player.inventory.heldItemSlot
                     val newSlot = event.packet.integers.read(0)
                     if (currentSlot == newSlot) return
@@ -272,7 +274,7 @@ class UltimineModule(private val plugin: SurvivalPlus) : Module, Listener {
         if (tool.type == Material.AIR) return false
         val meta = tool.itemMeta
         if (meta !is Damageable) return true
-        return meta.damage < tool.type.maxDurability
+        return meta.damage < tool.type.maxDurability - 1
     }
 
     private fun damageTool(player: Player, tool: ItemStack) {
