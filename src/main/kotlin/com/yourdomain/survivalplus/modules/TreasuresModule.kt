@@ -6,7 +6,11 @@ import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.format.TextDecoration
 import org.bukkit.GameMode
 import org.bukkit.Material
+import com.destroystokyo.paper.ParticleBuilder
+import org.bukkit.Color
+import org.bukkit.Location
 import org.bukkit.Particle
+import org.bukkit.Sound
 import org.bukkit.block.Block
 import org.bukkit.block.Chest
 import org.bukkit.entity.ArmorStand
@@ -59,6 +63,10 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
     override fun disable() {
         org.bukkit.event.HandlerList.unregisterAll(this)
         activeTreasures.keys.toList().forEach { removeTreasure(it) }
+    }
+
+    fun isTreasure(block: Block): Boolean {
+        return activeTreasures.containsKey(block)
     }
 
     @EventHandler
@@ -239,8 +247,18 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
         val location = block.location.add(0.5, 0.5, 0.5)
         val world = location.world!!
 
+        // Play a sound on spawn
+        val (sound, pitch) = when (rarity.lowercase()) {
+            "rare" -> Sound.ENTITY_PLAYER_LEVELUP to 0.7f
+            "epic" -> Sound.ENTITY_PLAYER_LEVELUP to 0.9f
+            "legendary" -> Sound.UI_TOAST_CHALLENGE_COMPLETE to 1.0f
+            "mythic" -> Sound.ENTITY_ENDER_DRAGON_GROWL to 0.8f
+            else -> Sound.ENTITY_ITEM_PICKUP to 1.0f
+        }
+        world.playSound(location, sound, 1.0f, pitch)
+
         return object : BukkitRunnable() {
-            var tick = 0
+            var tick = 0L
             override fun run() {
                 if (!activeTreasures.containsKey(block)) {
                     this.cancel()
@@ -249,35 +267,48 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
 
                 when (rarity.lowercase()) {
                     "rare" -> {
-                        val angle = (tick * 10) * (Math.PI / 180)
-                        val x = location.x + 0.7 * Math.cos(angle)
-                        val z = location.z + 0.7 * Math.sin(angle)
-                        world.spawnParticle(Particle.CRIT, x, location.y, z, 1, 0.0, 0.0, 0.0, 0.0)
+                        world.spawnParticle(Particle.END_ROD, location.clone().add(0.0, 0.5, 0.0), 2, 0.3, 0.3, 0.3, 0.0)
                     }
                     "epic" -> {
-                        for (i in 0..2) {
-                            val angle = (tick * 5 + i * 120) * (Math.PI / 180)
-                            val x = location.x + 1.0 * Math.cos(angle)
-                            val z = location.z + 1.0 * Math.sin(angle)
-                            world.spawnParticle(Particle.ENCHANT, x, location.y, z, 1, 0.0, 0.0, 0.0, 0.0)
+                        val angle1 = (tick * 12) * (Math.PI / 180)
+                        val x1 = location.x + 0.8 * Math.cos(angle1)
+                        val z1 = location.z + 0.8 * Math.sin(angle1)
+                        val y1 = location.y + (tick % 25) * 0.05
+                        Particle.DustOptions(Color.PURPLE, 1.0f).let {
+                            world.spawnParticle(Particle.DUST, Location(world, x1, y1, z1), 1, it)
+                        }
+
+                        val angle2 = (tick * 12 + 180) * (Math.PI / 180)
+                        val x2 = location.x + 0.8 * Math.cos(angle2)
+                        val z2 = location.z + 0.8 * Math.sin(angle2)
+                        val y2 = location.y + 1.25 - (tick % 25) * 0.05
+                        Particle.DustOptions(Color.FUCHSIA, 1.0f).let {
+                            world.spawnParticle(Particle.DUST, Location(world, x2, y2, z2), 1, it)
                         }
                     }
                     "legendary" -> {
-                        world.spawnParticle(Particle.FLAME, location, 3, 0.4, 0.4, 0.4, 0.01)
+                        world.spawnParticle(Particle.LAVA, location, 2, 0.2, 0.1, 0.2, 0.0)
+                        if (tick % 5 == 0L) {
+                            val x = location.x + (Random.nextDouble() - 0.5) * 1.5
+                            val z = location.z + (Random.nextDouble() - 0.5) * 1.5
+                            world.spawnParticle(Particle.FLAME, x, location.y, z, 5, 0.0, 0.5, 0.0, 0.05)
+                        }
                     }
                     "mythic" -> {
-                        val angle = tick * 18 * (Math.PI / 180)
-                        val x = location.x + 1.2 * Math.cos(angle)
-                        val z = location.z + 1.2 * Math.sin(angle)
-                        world.spawnParticle(Particle.DRAGON_BREATH, x, location.y, z, 1, 0.0, 0.0, 0.0, 0.0)
-                        world.spawnParticle(Particle.PORTAL, location, 5, 0.5, 0.5, 0.5, 0.2)
-                    }
-                    else -> {
-                        // No particles for normal rarity
+                        val angle = tick * 8 * (Math.PI / 180)
+                        for (i in 0..2) {
+                            val x = location.x + 1.5 * Math.cos(angle + i * (2 * Math.PI / 3))
+                            val z = location.z + 1.5 * Math.sin(angle + i * (2 * Math.PI / 3))
+                            world.spawnParticle(Particle.PORTAL, x, location.y + 0.5, z, 1, 0.0, 0.0, 0.0, 0.0)
+                        }
+                        if (tick % 20 == 0L) {
+                            world.spawnParticle(Particle.FIREWORK, location, 1, 0.2, 0.2, 0.2, 0.1)
+                            world.playSound(location, Sound.BLOCK_BEACON_AMBIENT, 0.5f, 1.5f)
+                        }
                     }
                 }
                 tick++
             }
-        }.runTaskTimer(plugin, 0L, 2L)
+        }.runTaskTimer(plugin, 0L, 1L)
     }
 }

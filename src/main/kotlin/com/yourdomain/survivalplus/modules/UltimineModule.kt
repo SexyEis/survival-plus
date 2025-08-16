@@ -103,7 +103,11 @@ class UltimineModule(private val plugin: SurvivalPlus) : Module, Listener {
 
     private fun breakBlocksAndCollect(player: Player, blocks: Set<Block>, tool: ItemStack) {
         val allDrops = mutableListOf<ItemStack>()
+        val treasuresModule = plugin.moduleManager.getModule("treasures") as? TreasuresModule
         for (block in blocks) {
+            if (treasuresModule != null && treasuresModule.isTreasure(block)) {
+                continue
+            }
             if (!toolHasDurability(tool)) break
 
             val breakEvent = BlockBreakEvent(block, player)
@@ -166,21 +170,17 @@ class UltimineModule(private val plugin: SurvivalPlus) : Module, Listener {
     }
 
     private fun findTreeLikeBlocks(player: Player, startBlock: Block, tool: ItemStack): Set<Block> {
-        val meta = tool.itemMeta as? Damageable ?: return emptySet()
-        var remainingDurability = tool.type.maxDurability - meta.damage - 1
-        if (remainingDurability <= 0) return emptySet()
-
+        val maxBlocks = plugin.config.getInt("modules.ultimine.max-blocks", 64)
         val blocks = mutableSetOf<Block>()
         val toVisit = ArrayDeque<Block>()
         val visited = mutableSetOf<Block>()
         toVisit.add(startBlock)
         visited.add(startBlock)
 
-        while (toVisit.isNotEmpty() && remainingDurability > 0) {
+        while (toVisit.isNotEmpty() && blocks.size < maxBlocks) {
             val current = toVisit.removeFirst()
             if (Tag.LOGS.isTagged(current.type)) {
                 blocks.add(current)
-                remainingDurability--
 
                 for (x in -1..1) {
                     for (y in -1..1) {
@@ -227,21 +227,17 @@ class UltimineModule(private val plugin: SurvivalPlus) : Module, Listener {
     }
 
     private fun findMaxBreakBlocks(player: Player, startBlock: Block, tool: ItemStack): Set<Block> {
-        val meta = tool.itemMeta as? Damageable ?: return emptySet()
-        var remainingDurability = tool.type.maxDurability - meta.damage - 1
-        if (remainingDurability <= 0) return emptySet()
-
+        val maxBlocks = plugin.config.getInt("modules.ultimine.max-blocks", 64)
         val blocks = mutableSetOf<Block>()
         val toVisit = ArrayDeque<Block>()
         val visited = mutableSetOf<Block>()
         toVisit.add(startBlock)
         visited.add(startBlock)
 
-        while (toVisit.isNotEmpty() && remainingDurability > 0) {
+        while (toVisit.isNotEmpty() && blocks.size < maxBlocks) {
             val current = toVisit.removeFirst()
             if (canToolBreak(tool, current)) {
                 blocks.add(current)
-                remainingDurability--
 
                 for (x in -1..1) {
                     for (y in -1..1) {
@@ -274,7 +270,7 @@ class UltimineModule(private val plugin: SurvivalPlus) : Module, Listener {
         if (tool.type == Material.AIR) return false
         val meta = tool.itemMeta
         if (meta !is Damageable) return true
-        return meta.damage < tool.type.maxDurability - 1
+        return meta.damage < tool.type.maxDurability
     }
 
     private fun damageTool(player: Player, tool: ItemStack) {
