@@ -35,3 +35,44 @@ modules:
       - "DEEPSLATE_EMERALD_ORE"
       - "NETHER_GOLD_ORE"
       - "NETHER_QUARTZ_ORE"
+  timber:
+    enabled: true
+    # The maximum number of logs that can be chopped at once.
+    max-logs: 256
+    # The list of blocks considered logs.
+    log-types:
+      - "ACACIA_LOG"
+      - "BIRCH_LOG"
+      - "DARK_OAK_LOG"
+      - "JUNGLE_LOG"
+      - "OAK_LOG"
+      - "SPRUCE_LOG"
+      - "MANGROVE_LOG"
+      - "CHERRY_LOG"
+      - "STRIPPED_ACACIA_LOG"
+      - "STRIPPED_BIRCH_LOG"
+      - "STRIPPED_DARK_OAK_LOG"
+      - "STRIPPED_JUNGLE_LOG"
+      - "STRIPPED_OAK_LOG"
+      - "STRIPPED_SPRUCE_LOG"
+      - "STRIPPED_MANGROVE_LOG"
+      - "STRIPPED_CHERRY_LOG"
+      - "CRIMSON_STEM"
+      - "WARPED_STEM"
+      - "STRIPPED_CRIMSON_STEM"
+      - "STRIPPED_WARPED_STEM"
+    # The list of blocks considered leaves.
+    leaf-types:
+      - "ACACIA_LEAVES"
+      - "BIRCH_LEAVES"
+      - "DARK_OAK_LEAVES"
+      - "JUNGLE_LEAVES"
+      - "OAK_LEAVES"
+      - "SPRUCE_LEAVES"
+      - "MANGROVE_LEAVES"
+      - "CHERRY_LEAVES"
+      - "AZALEA_LEAVES"
+      - "FLOWERING_AZALEA_LEAVES"
+      - "NETHER_WART_BLOCK"
+      - "WARPED_WART_BLOCK"
+      - "SHROOMLIGHT"
