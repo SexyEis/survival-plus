@@ -82,7 +82,7 @@ class AntiCooldownModule(private val plugin: SurvivalPlus) : Module, Listener {
         }
 
         damageValues[material]?.let {
-            event.damage = it + 1.0
+            event.damage = it
         }
     }
 
