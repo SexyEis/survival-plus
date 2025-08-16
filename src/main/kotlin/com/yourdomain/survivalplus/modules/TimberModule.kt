@@ -160,15 +160,15 @@ class TimberModule(private val plugin: SurvivalPlus) : Module, Listener {
             }
         }
 
-        // Find all leaves adjacent to the logs
+        // Find all leaves within 6 blocks of any log
+        val leafSearchRadius = 6
         for (log in logs) {
-            for (x in -1..1) {
-                for (y in -1..1) {
-                    for (z in -1..1) {
-                        if (x == 0 && y == 0 && z == 0) continue
-                        val neighbor = log.getRelative(x, y, z)
-                        if (neighbor.type in leafTypes) {
-                            leaves.add(neighbor)
+            for (x in -leafSearchRadius..leafSearchRadius) {
+                for (y in -leafSearchRadius..leafSearchRadius) {
+                    for (z in -leafSearchRadius..leafSearchRadius) {
+                        val block = log.getRelative(x, y, z)
+                        if (block.type in leafTypes) {
+                            leaves.add(block)
                         }
                     }
                 }
@@ -212,7 +212,7 @@ class TimberModule(private val plugin: SurvivalPlus) : Module, Listener {
         visited.add(leaf)
 
         var distance = 0
-        while (toVisit.isNotEmpty() && distance < 6) {
+        while (toVisit.isNotEmpty() && distance < 7) {
             val size = toVisit.size
             repeat(size) {
                 val current = toVisit.removeFirst()
