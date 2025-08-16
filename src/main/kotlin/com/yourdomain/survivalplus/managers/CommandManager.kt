@@ -1,7 +1,8 @@
 package com.yourdomain.survivalplus.managers
 
 import com.yourdomain.survivalplus.SurvivalPlus
-import org.bukkit.ChatColor
+import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.format.NamedTextColor
 import org.bukkit.command.Command
 import org.bukkit.command.CommandExecutor
 import org.bukkit.command.CommandSender
@@ -16,7 +17,7 @@ class CommandManager(private val plugin: SurvivalPlus) : CommandExecutor, TabCom
 
     override fun onCommand(sender: CommandSender, command: Command, label: String, args: Array<out String>): Boolean {
         if (!sender.hasPermission("survivalplus.admin")) {
-            sender.sendMessage("${ChatColor.RED}You do not have permission to use this command.")
+            sender.sendMessage(Component.text("You do not have permission to use this command.", NamedTextColor.RED))
             return true
         }
 
@@ -29,7 +30,7 @@ class CommandManager(private val plugin: SurvivalPlus) : CommandExecutor, TabCom
             "help" -> sendHelpMessage(sender)
             "list" -> listModules(sender)
             "toggle" -> toggleModule(sender, args)
-            else -> sender.sendMessage("${ChatColor.RED}Unknown subcommand. Use /sp help for a list of commands.")
+            else -> sender.sendMessage(Component.text("Unknown subcommand. Use /sp help for a list of commands.", NamedTextColor.RED))
         }
 
         return true
@@ -46,36 +47,39 @@ class CommandManager(private val plugin: SurvivalPlus) : CommandExecutor, TabCom
     }
 
     private fun sendHelpMessage(sender: CommandSender) {
-        sender.sendMessage("${ChatColor.GOLD}--- SurvivalPlus Help ---")
-        sender.sendMessage("${ChatColor.YELLOW}/sp help ${ChatColor.GRAY}- Shows this help message.")
-        sender.sendMessage("${ChatColor.YELLOW}/sp list ${ChatColor.GRAY}- Lists all modules and their status.")
-        sender.sendMessage("${ChatColor.YELLOW}/sp toggle <module> ${ChatColor.GRAY}- Toggles a module on or off.")
-        sender.sendMessage("${ChatColor.YELLOW}/spmenu ${ChatColor.GRAY}- Opens the GUI menu.")
+        sender.sendMessage(Component.text("--- SurvivalPlus Help ---", NamedTextColor.GOLD))
+        sender.sendMessage(Component.text("/sp help ", NamedTextColor.YELLOW).append(Component.text("- Shows this help message.", NamedTextColor.GRAY)))
+        sender.sendMessage(Component.text("/sp list ", NamedTextColor.YELLOW).append(Component.text("- Lists all modules and their status.", NamedTextColor.GRAY)))
+        sender.sendMessage(Component.text("/sp toggle <module> ", NamedTextColor.YELLOW).append(Component.text("- Toggles a module on or off.", NamedTextColor.GRAY)))
+        sender.sendMessage(Component.text("/spmenu ", NamedTextColor.YELLOW).append(Component.text("- Opens the GUI menu.", NamedTextColor.GRAY)))
     }
 
     private fun listModules(sender: CommandSender) {
-        sender.sendMessage("${ChatColor.GOLD}--- Modules ---")
+        sender.sendMessage(Component.text("--- Modules ---", NamedTextColor.GOLD))
         plugin.moduleManager.getModules().forEach { module ->
-            val status = if (plugin.moduleManager.isModuleEnabled(module.getName())) {
-                "${ChatColor.GREEN}Enabled"
+            val isEnabled = plugin.moduleManager.isModuleEnabled(module.getName())
+            val status = if (isEnabled) {
+                Component.text("Enabled", NamedTextColor.GREEN)
             } else {
-                "${ChatColor.RED}Disabled"
+                Component.text("Disabled", NamedTextColor.RED)
             }
-            sender.sendMessage("${ChatColor.YELLOW}${module.getName()}: $status")
+            sender.sendMessage(Component.text("${module.getName()}: ", NamedTextColor.YELLOW).append(status))
         }
     }
 
     private fun toggleModule(sender: CommandSender, args: Array<out String>) {
         if (args.size < 2) {
-            sender.sendMessage("${ChatColor.RED}Usage: /sp toggle <module>")
+            sender.sendMessage(Component.text("Usage: /sp toggle <module>", NamedTextColor.RED))
             return
         }
         val moduleName = args[1]
-        if (plugin.moduleManager.toggleModule(moduleName)) {
-            val status = if (plugin.moduleManager.isModuleEnabled(moduleName)) "enabled" else "disabled"
-            sender.sendMessage("${ChatColor.GREEN}Module '${moduleName}' has been $status.")
+        if (plugin.moduleManager.getModule(moduleName) != null) {
+            plugin.moduleManager.toggleModule(moduleName)
+            val isEnabled = plugin.moduleManager.isModuleEnabled(moduleName)
+            val status = if (isEnabled) "enabled" else "disabled"
+            sender.sendMessage(Component.text("Module '$moduleName' has been $status.", NamedTextColor.GREEN))
         } else {
-            sender.sendMessage("${ChatColor.RED}Module '${moduleName}' not found.")
+            sender.sendMessage(Component.text("Module '$moduleName' not found.", NamedTextColor.RED))
         }
     }
 }

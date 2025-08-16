@@ -2,9 +2,12 @@ package com.yourdomain.survivalplus.managers
 
 import com.yourdomain.survivalplus.SurvivalPlus
 import com.yourdomain.survivalplus.modules.Module
+import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.format.NamedTextColor
+import net.kyori.adventure.text.format.TextDecoration
 import org.bukkit.Bukkit
-import org.bukkit.ChatColor
 import org.bukkit.Material
+import org.bukkit.NamespacedKey
 import org.bukkit.command.Command
 import org.bukkit.command.CommandExecutor
 import org.bukkit.command.CommandSender
@@ -13,10 +16,12 @@ import org.bukkit.event.EventHandler
 import org.bukkit.event.Listener
 import org.bukkit.event.inventory.InventoryClickEvent
 import org.bukkit.inventory.ItemStack
+import org.bukkit.persistence.PersistentDataType
 
 class GUIManager(private val plugin: SurvivalPlus) : Listener, CommandExecutor {
 
-    private val inventoryTitle = "${ChatColor.DARK_AQUA}SurvivalPlus Modules"
+    private val inventoryTitle = Component.text("SurvivalPlus Modules", NamedTextColor.DARK_AQUA)
+    private val moduleKey = NamespacedKey(plugin, "module_name")
 
     fun registerGUI() {
         plugin.server.pluginManager.registerEvents(this, plugin)
@@ -29,7 +34,7 @@ class GUIManager(private val plugin: SurvivalPlus) : Listener, CommandExecutor {
             return true
         }
         if (!sender.hasPermission("survivalplus.menu")) {
-            sender.sendMessage("${ChatColor.RED}You do not have permission to use this command.")
+            sender.sendMessage(Component.text("You do not have permission to use this command.", NamedTextColor.RED))
             return true
         }
         openMainMenu(sender)
@@ -37,7 +42,7 @@ class GUIManager(private val plugin: SurvivalPlus) : Listener, CommandExecutor {
     }
 
     private fun openMainMenu(player: Player) {
-        val inventory = Bukkit.createInventory(null, 9, inventoryTitle)
+        val inventory = Bukkit.createInventory(player, 9, inventoryTitle)
         plugin.moduleManager.getModules().forEachIndexed { index, module ->
             if (index < 9) {
                 inventory.setItem(index, createModuleItem(module))
@@ -51,31 +56,37 @@ class GUIManager(private val plugin: SurvivalPlus) : Listener, CommandExecutor {
         val material = if (isEnabled) Material.LIME_STAINED_GLASS_PANE else Material.RED_STAINED_GLASS_PANE
         val item = ItemStack(material)
         val meta = item.itemMeta
-        meta?.setDisplayName("${ChatColor.BOLD}${module.getName()}")
-        val lore = mutableListOf<String>()
-        lore.add("${ChatColor.GRAY}${module.getDescription()}")
-        lore.add("")
-        lore.add(if (isEnabled) "${ChatColor.GREEN}Status: Enabled" else "${ChatColor.RED}Status: Disabled")
-        lore.add("${ChatColor.YELLOW}Click to toggle!")
-        meta?.lore = lore
+
+        meta?.displayName(Component.text(module.getName(), NamedTextColor.WHITE).decoration(TextDecoration.BOLD, true))
+
+        val lore = mutableListOf<Component>()
+        lore.add(Component.text(module.getDescription(), NamedTextColor.GRAY))
+        lore.add(Component.empty())
+        lore.add(
+            if (isEnabled) Component.text("Status: Enabled", NamedTextColor.GREEN)
+            else Component.text("Status: Disabled", NamedTextColor.RED)
+        )
+        lore.add(Component.text("Click to toggle!", NamedTextColor.YELLOW))
+        meta?.lore(lore)
+
+        meta?.persistentDataContainer?.set(moduleKey, PersistentDataType.STRING, module.getName())
+
         item.itemMeta = meta
         return item
     }
 
     @EventHandler
     fun onInventoryClick(event: InventoryClickEvent) {
-        if (event.view.title != inventoryTitle) return
+        if (event.view.title() != inventoryTitle) return
         event.isCancelled = true
 
         val clickedItem = event.currentItem ?: return
         val player = event.whoClicked as? Player ?: return
 
-        val moduleName = clickedItem.itemMeta?.displayName?.let { ChatColor.stripColor(it) }
+        val moduleName = clickedItem.itemMeta?.persistentDataContainer?.get(moduleKey, PersistentDataType.STRING)
         if (moduleName != null) {
             plugin.moduleManager.toggleModule(moduleName)
-            // A bit inefficient to reopen the whole inventory, a simple update would be better
-            // but for a small inventory like this, it's acceptable and simpler.
-            openMainMenu(player)
+            openMainMenu(player) // Re-open to update the GUI
         }
     }
 }

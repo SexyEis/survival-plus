@@ -15,24 +15,30 @@ class JoinQuitMessageModule(private val plugin: SurvivalPlus) : Module, Listener
     }
 
     override fun getDescription(): String {
-        return "Disables the join and quit messages."
+        return "When this module is OFF, join and quit messages will be hidden."
     }
 
     override fun enable() {
-        plugin.server.pluginManager.registerEvents(this, plugin)
+        // This is the "ON" state for the module.
+        // Per user request, "ON" means messages are SHOWN.
+        // So we unregister the listener to restore default behavior.
+        HandlerList.unregisterAll(this)
     }
 
     override fun disable() {
-        HandlerList.unregisterAll(this)
+        // This is the "OFF" state for the module.
+        // Per user request, "OFF" means messages are HIDDEN.
+        // So we register the listener to suppress the messages.
+        plugin.server.pluginManager.registerEvents(this, plugin)
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
     fun onPlayerJoin(event: PlayerJoinEvent) {
-        event.joinMessage = null
+        event.joinMessage(null)
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
     fun onPlayerQuit(event: PlayerQuitEvent) {
-        event.quitMessage = null
+        event.quitMessage(null)
     }
 }
