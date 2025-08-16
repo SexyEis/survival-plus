@@ -160,15 +160,15 @@ class TimberModule(private val plugin: SurvivalPlus) : Module, Listener {
             }
         }
 
-        // Find all leaves within 6 blocks of any log
-        val leafSearchRadius = 6
+        // Find all leaves adjacent to the logs
         for (log in logs) {
-            for (x in -leafSearchRadius..leafSearchRadius) {
-                for (y in -leafSearchRadius..leafSearchRadius) {
-                    for (z in -leafSearchRadius..leafSearchRadius) {
-                        val block = log.getRelative(x, y, z)
-                        if (block.type in leafTypes) {
-                            leaves.add(block)
+            for (x in -1..1) {
+                for (y in -1..1) {
+                    for (z in -1..1) {
+                        if (x == 0 && y == 0 && z == 0) continue
+                        val neighbor = log.getRelative(x, y, z)
+                        if (neighbor.type in leafTypes) {
+                            leaves.add(neighbor)
                         }
                     }
                 }
@@ -185,15 +185,14 @@ class TimberModule(private val plugin: SurvivalPlus) : Module, Listener {
 
         object : BukkitRunnable() {
             override fun run() {
-                for (i in 1..20) { // Decay 20 leaves per tick to reduce lag
+                for (i in 1..100) { // Check up to 100 leaves per tick
                     if (!leavesIterator.hasNext()) {
                         this.cancel()
                         return
                     }
                     val leaf = leavesIterator.next()
-                    if (leaf.type in leafTypes) { // Check if it hasn't already decayed
-                        val leafData = leaf.blockData as? Leaves
-                        if (leafData != null && !leafData.isPersistent) {
+                    if (leaf.type in leafTypes && (leaf.blockData as? Leaves)?.isPersistent == false) {
+                        if (!isLeafConnectedToLog(leaf)) {
                             val decayEvent = LeavesDecayEvent(leaf)
                             plugin.server.pluginManager.callEvent(decayEvent)
                             if (!decayEvent.isCancelled) {
@@ -203,7 +202,41 @@ class TimberModule(private val plugin: SurvivalPlus) : Module, Listener {
                     }
                 }
             }
-        }.runTaskTimer(plugin, 1L, 1L)
+        }.runTaskTimer(plugin, 20L, 2L) // Start after 1 sec, run every 2 ticks
+    }
+
+    private fun isLeafConnectedToLog(leaf: Block): Boolean {
+        val toVisit = ArrayDeque<Block>()
+        val visited = mutableSetOf<Block>()
+        toVisit.add(leaf)
+        visited.add(leaf)
+
+        var distance = 0
+        while (toVisit.isNotEmpty() && distance < 6) {
+            val size = toVisit.size
+            repeat(size) {
+                val current = toVisit.removeFirst()
+                if (current.type in logTypes) {
+                    return true // Found a log
+                }
+
+                for (x in -1..1) {
+                    for (y in -1..1) {
+                        for (z in -1..1) {
+                            if (x == 0 && y == 0 && z == 0) continue
+                            val neighbor = current.getRelative(x, y, z)
+                            if (neighbor.type in leafTypes || neighbor.type in logTypes) {
+                                if (visited.add(neighbor)) {
+                                    toVisit.add(neighbor)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            distance++
+        }
+        return false
     }
 
     private fun toolHasDurability(tool: ItemStack): Boolean {
