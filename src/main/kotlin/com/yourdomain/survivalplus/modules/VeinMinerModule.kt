@@ -17,6 +17,7 @@ import kotlin.random.Random
 
 class VeinMinerModule(private val plugin: SurvivalPlus) : Module, Listener {
 
+    private val processingBlocks = ThreadLocal.withInitial { mutableSetOf<Block>() }
     private val mineableOres = mutableSetOf<Material>()
 
     init {
@@ -55,6 +56,10 @@ class VeinMinerModule(private val plugin: SurvivalPlus) : Module, Listener {
 
     @EventHandler(priority = EventPriority.NORMAL, ignoreCancelled = true)
     fun onBlockBreak(event: BlockBreakEvent) {
+        if (processingBlocks.get().contains(event.block)) {
+            return
+        }
+
         val player = event.player
         val originalBlock = event.block
         val item = player.inventory.itemInMainHand
@@ -70,28 +75,34 @@ class VeinMinerModule(private val plugin: SurvivalPlus) : Module, Listener {
             return
         }
 
-        // The original block is broken by the player event, which also handles the first durability loss.
-        // We just handle the rest of the vein.
-        val remainingVein = vein - originalBlock
+        processingBlocks.get().addAll(vein)
 
-        for (veinBlock in remainingVein) {
-            // Check if the tool has enough durability for one more block.
-            if (!toolHasDurability(item)) {
-                break
+        try {
+            // The original block is broken by the player event, which also handles the first durability loss.
+            // We just handle the rest of the vein.
+            val remainingVein = vein - originalBlock
+
+            for (veinBlock in remainingVein) {
+                // Check if the tool has enough durability for one more block.
+                if (!toolHasDurability(item)) {
+                    break
+                }
+
+                // Fire a new BlockBreakEvent for each block to allow other plugins to interact
+                // and to ensure player stats are counted.
+                val newEvent = BlockBreakEvent(veinBlock, player)
+                plugin.server.pluginManager.callEvent(newEvent)
+
+                if (!newEvent.isCancelled) {
+                    // Break the block, respecting enchantments.
+                    veinBlock.breakNaturally(item)
+
+                    // Apply damage for breaking the block.
+                    damageTool(player, item)
+                }
             }
-
-            // Fire a new BlockBreakEvent for each block to allow other plugins to interact
-            // and to ensure player stats are counted.
-            val newEvent = BlockBreakEvent(veinBlock, player)
-            plugin.server.pluginManager.callEvent(newEvent)
-
-            if (!newEvent.isCancelled) {
-                // Break the block, respecting enchantments.
-                veinBlock.breakNaturally(item)
-
-                // Apply damage for breaking the block.
-                damageTool(player, item)
-            }
+        } finally {
+            processingBlocks.get().clear()
         }
     }
 
