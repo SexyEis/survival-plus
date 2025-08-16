@@ -1,0 +1,23 @@
+name: SurvivalPlus
+version: 1.0-SNAPSHOT
+main: com.yourdomain.survivalplus.SurvivalPlus
+api-version: '1.20'
+authors: [Jules]
+description: A survival enhancing plugin with a modular approach.
+commands:
+  survivalplus:
+    description: Base command for SurvivalPlus.
+    usage: /<command> [subcommand]
+    aliases: [sp]
+    permission: survivalplus.admin
+  spmenu:
+    description: Opens the SurvivalPlus module menu.
+    usage: /spmenu
+    permission: survivalplus.menu
+permissions:
+  survivalplus.admin:
+    description: Allows access to all SurvivalPlus commands.
+    default: op
+  survivalplus.menu:
+    description: Allows access to the SurvivalPlus GUI menu.
+    default: op

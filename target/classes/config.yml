@@ -1,0 +1,13 @@
+# SurvivalPlus Configuration
+
+# A list of command aliases for the base command.
+# The main command is /survivalplus
+# Default: [sp]
+command-aliases:
+  - sp
+
+modules:
+  # Enable or disable the join/quit message module.
+  # This module will suppress the join and quit messages when enabled.
+  join-quit-message:
+    enabled: true
