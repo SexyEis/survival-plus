@@ -58,29 +58,31 @@ class UltimineModule(private val plugin: SurvivalPlus) : Module, Listener {
             override fun onPacketReceiving(event: PacketEvent) {
                 val player = event.player
                 if (player.isSneaking) {
-                    event.isCancelled = true
-
                     val currentSlot = player.inventory.heldItemSlot
                     val newSlot = event.packet.integers.read(0)
-                    if (currentSlot == newSlot) return
 
-                    val previousSlot = lastSlot.getOrPut(player.uniqueId) { currentSlot }
-                    var modeOrdinal = getPlayerMode(player).ordinal
+                    // Heuristic to detect scroll direction. This is not perfect.
+                    // It assumes that the client sends the packet for the next slot in the scroll direction.
+                    var scrollUp = false
+                    if (currentSlot == 8 && newSlot == 0) scrollUp = true
+                    else if (currentSlot == 0 && newSlot == 8) scrollUp = false
+                    else if (newSlot > currentSlot) scrollUp = true
 
-                    if (newSlot > previousSlot || (newSlot == 0 && previousSlot == 8)) {
-                        modeOrdinal++
-                    } else if (newSlot < previousSlot || (newSlot == 8 && previousSlot == 0)) {
-                        modeOrdinal--
+                    val modeOrdinal = getPlayerMode(player).ordinal
+                    val nextModeOrdinal = if (scrollUp) {
+                        (modeOrdinal + 1) % Mode.values().size
+                    } else {
+                        (modeOrdinal - 1 + Mode.values().size) % Mode.values().size
                     }
 
-                    if (modeOrdinal < 0) modeOrdinal = Mode.values().size - 1
-                    if (modeOrdinal >= Mode.values().size) modeOrdinal = 0
-
-                    val nextMode = Mode.values()[modeOrdinal]
-
+                    val nextMode = Mode.values()[nextModeOrdinal]
                     setPlayerMode(player, nextMode)
                     player.sendActionBar(Component.text("Mode: ", NamedTextColor.GRAY).append(Component.text(nextMode.name, NamedTextColor.GREEN)))
-                    lastSlot[player.uniqueId] = newSlot
+
+                    // Force the client to stay on the same slot
+                    plugin.server.scheduler.runTask(plugin, Runnable {
+                        player.inventory.heldItemSlot = currentSlot
+                    })
                 }
             }
         })
@@ -101,7 +103,7 @@ class UltimineModule(private val plugin: SurvivalPlus) : Module, Listener {
     @EventHandler
     fun onPlayerInteract(event: PlayerInteractEvent) {
         val player = event.player
-        if (player.isSneaking && event.action == Action.RIGHT_CLICK_AIR || event.action == Action.RIGHT_CLICK_BLOCK) {
+        if (player.isSneaking && (event.action == Action.RIGHT_CLICK_AIR || event.action == Action.RIGHT_CLICK_BLOCK)) {
             if (player.inventory.itemInMainHand.type.isEdible || player.inventory.itemInMainHand.type == Material.SHIELD) return
 
             val isActive = toggleUltimineActive(player)
@@ -126,9 +128,15 @@ class UltimineModule(private val plugin: SurvivalPlus) : Module, Listener {
 
         val blocksToBreak = when (getPlayerMode(player)) {
             Mode.NORMAL -> findAdjacentBlocks(originalBlock)
-            Mode.TUNNEL -> findTunnelBlocks(originalBlock, player.facing, 2, 1)
-            Mode.BIG_TUNNEL -> findTunnelBlocks(originalBlock, player.facing, 3, 3)
-            Mode.MAX_BREAK -> findMaxBreakBlocks(player, originalBlock, item)
+            Mode.TUNNEL -> findTunnelBlocks(originalBlock, player.facing, 2, 1, item)
+            Mode.BIG_TUNNEL -> findTunnelBlocks(originalBlock, player.facing, 3, 3, item)
+            Mode.MAX_BREAK -> {
+                if (Tag.ITEMS_AXES.isTagged(item.type) && Tag.LOGS.isTagged(originalBlock.type)) {
+                    findTreeLikeBlocks(player, originalBlock, item)
+                } else {
+                    findMaxBreakBlocks(player, originalBlock, item)
+                }
+            }
         }
 
         if (blocksToBreak.isEmpty()) return
@@ -199,7 +207,40 @@ class UltimineModule(private val plugin: SurvivalPlus) : Module, Listener {
         return blocks
     }
 
-    private fun findTunnelBlocks(startBlock: Block, direction: BlockFace, width: Int, height: Int): Set<Block> {
+    private fun findTreeLikeBlocks(player: Player, startBlock: Block, tool: ItemStack): Set<Block> {
+        val meta = tool.itemMeta as? Damageable ?: return emptySet()
+        var remainingDurability = tool.type.maxDurability - meta.damage - 1
+        if (remainingDurability <= 0) return emptySet()
+
+        val blocks = mutableSetOf<Block>()
+        val toVisit = ArrayDeque<Block>()
+        val visited = mutableSetOf<Block>()
+        toVisit.add(startBlock)
+        visited.add(startBlock)
+
+        while (toVisit.isNotEmpty() && remainingDurability > 0) {
+            val current = toVisit.removeFirst()
+            if (Tag.LOGS.isTagged(current.type)) {
+                blocks.add(current)
+                remainingDurability--
+
+                for (x in -1..1) {
+                    for (y in -1..1) {
+                        for (z in -1..1) {
+                            if (x == 0 && y == 0 && z == 0) continue
+                            val neighbor = current.getRelative(x, y, z)
+                            if (visited.add(neighbor)) {
+                                toVisit.add(neighbor)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return blocks
+    }
+
+    private fun findTunnelBlocks(startBlock: Block, direction: BlockFace, width: Int, height: Int, tool: ItemStack): Set<Block> {
         val maxBlocks = plugin.config.getInt("modules.ultimine.max-blocks", 64)
         val blocks = mutableSetOf<Block>()
         val length = maxBlocks / (width * height)
@@ -217,8 +258,9 @@ class UltimineModule(private val plugin: SurvivalPlus) : Module, Listener {
             for (h in 0 until height) {
                 for (w in 0 until width) {
                     val block = startCorner.getRelative(direction, l).getRelative(up, h).getRelative(right, w)
-                    if(block.type != Material.AIR && block.type != Material.CAVE_AIR && block.type != Material.VOID_AIR)
+                    if (canToolBreak(tool, block)) {
                         blocks.add(block)
+                    }
                 }
             }
         }
