@@ -30,6 +30,7 @@ class SurvivalPlus : JavaPlugin() {
         moduleManager.registerModule(TimberModule(this))
         moduleManager.registerModule(UltimineModule(this))
         moduleManager.registerModule(ToolStorageModule(this))
+        moduleManager.registerModule(AntiCooldownModule(this))
 
         // Enable modules based on config
         moduleManager.initialModuleToggle()

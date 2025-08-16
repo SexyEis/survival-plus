@@ -84,3 +84,5 @@ modules:
       - "NETHER_WART_BLOCK"
       - "WARPED_WART_BLOCK"
       - "SHROOMLIGHT"
+  anticooldown:
+    enabled: true
