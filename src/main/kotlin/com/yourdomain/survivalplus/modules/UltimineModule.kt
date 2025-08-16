@@ -1,10 +1,5 @@
 package com.yourdomain.survivalplus.modules
 
-import com.comphenix.protocol.PacketType
-import com.comphenix.protocol.ProtocolLibrary
-import com.comphenix.protocol.events.ListenerPriority
-import com.comphenix.protocol.events.PacketAdapter
-import com.comphenix.protocol.events.PacketEvent
 import com.yourdomain.survivalplus.SurvivalPlus
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
@@ -29,72 +24,34 @@ import kotlin.random.Random
 
 class UltimineModule(private val plugin: SurvivalPlus) : Module, Listener {
 
-    private enum class Mode {
+    enum class Mode {
         NORMAL, TUNNEL, BIG_TUNNEL, MAX_BREAK
     }
 
     private val playerModes = mutableMapOf<UUID, Mode>()
     private val ultimineActive = mutableMapOf<UUID, Boolean>()
     private val processingBlocks = ThreadLocal.withInitial { mutableSetOf<Block>() }
-    private var lastSlot = mutableMapOf<UUID, Int>()
-
+    private lateinit var gui: UltimineGUI
 
     override fun getName(): String = "ultimine"
     override fun getDescription(): String = "Adds ultimate mining capabilities with different modes."
 
     override fun enable() {
         plugin.server.pluginManager.registerEvents(this, plugin)
-        registerPacketListener()
+        gui = UltimineGUI(plugin, this)
     }
 
     override fun disable() {
         org.bukkit.event.HandlerList.unregisterAll(this)
-        ProtocolLibrary.getProtocolManager().removePacketListeners(plugin)
     }
 
-    private fun registerPacketListener() {
-        val protocolManager = ProtocolLibrary.getProtocolManager()
-        protocolManager.addPacketListener(object : PacketAdapter(plugin, ListenerPriority.NORMAL, PacketType.Play.Client.HELD_ITEM_SLOT) {
-            override fun onPacketReceiving(event: PacketEvent) {
-                val player = event.player
-                if (player.isSneaking) {
-                    val currentSlot = player.inventory.heldItemSlot
-                    val newSlot = event.packet.integers.read(0)
-
-                    // Heuristic to detect scroll direction. This is not perfect.
-                    // It assumes that the client sends the packet for the next slot in the scroll direction.
-                    var scrollUp = false
-                    if (currentSlot == 8 && newSlot == 0) scrollUp = true
-                    else if (currentSlot == 0 && newSlot == 8) scrollUp = false
-                    else if (newSlot > currentSlot) scrollUp = true
-
-                    val modeOrdinal = getPlayerMode(player).ordinal
-                    val nextModeOrdinal = if (scrollUp) {
-                        (modeOrdinal + 1) % Mode.values().size
-                    } else {
-                        (modeOrdinal - 1 + Mode.values().size) % Mode.values().size
-                    }
-
-                    val nextMode = Mode.values()[nextModeOrdinal]
-                    setPlayerMode(player, nextMode)
-                    player.sendActionBar(Component.text("Mode: ", NamedTextColor.GRAY).append(Component.text(nextMode.name, NamedTextColor.GREEN)))
-
-                    // Force the client to stay on the same slot
-                    plugin.server.scheduler.runTask(plugin, Runnable {
-                        player.inventory.heldItemSlot = currentSlot
-                    })
-                }
-            }
-        })
-    }
-
-    private fun getPlayerMode(player: Player): Mode = playerModes.getOrPut(player.uniqueId) { Mode.NORMAL }
-    private fun setPlayerMode(player: Player, mode: Mode) {
+    fun getPlayerMode(player: Player): Mode = playerModes.getOrPut(player.uniqueId) { Mode.NORMAL }
+    fun setPlayerMode(player: Player, mode: Mode) {
         playerModes[player.uniqueId] = mode
     }
 
-    private fun isUltimineActive(player: Player): Boolean = ultimineActive.getOrPut(player.uniqueId) { false }
-    private fun toggleUltimineActive(player: Player): Boolean {
+    fun isUltimineActive(player: Player): Boolean = ultimineActive.getOrPut(player.uniqueId) { false }
+    fun toggleUltimineActive(player: Player): Boolean {
         val newState = !isUltimineActive(player)
         ultimineActive[player.uniqueId] = newState
         return newState
@@ -105,14 +62,8 @@ class UltimineModule(private val plugin: SurvivalPlus) : Module, Listener {
         val player = event.player
         if (player.isSneaking && (event.action == Action.RIGHT_CLICK_AIR || event.action == Action.RIGHT_CLICK_BLOCK)) {
             if (player.inventory.itemInMainHand.type.isEdible || player.inventory.itemInMainHand.type == Material.SHIELD) return
-
-            val isActive = toggleUltimineActive(player)
-            val status = if (isActive) {
-                Component.text("ENABLED", NamedTextColor.GREEN, TextDecoration.BOLD)
-            } else {
-                Component.text("DISABLED", NamedTextColor.RED, TextDecoration.BOLD)
-            }
-            player.sendActionBar(Component.text("Ultimine: ").append(status))
+            event.isCancelled = true
+            gui.open(player)
         }
     }
 

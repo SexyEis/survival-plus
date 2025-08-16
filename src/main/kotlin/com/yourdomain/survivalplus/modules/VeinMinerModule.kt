@@ -152,7 +152,7 @@ class VeinMinerModule(private val plugin: SurvivalPlus) : Module, Listener {
         val meta = tool.itemMeta
         if (meta !is Damageable) return true // Not a damageable item
 
-        return meta.damage < tool.type.maxDurability - 1
+        return (tool.type.maxDurability - meta.damage) > 1
     }
     private fun damageTool(player: Player, tool: ItemStack) {
         if (tool.itemMeta !is Damageable) return
