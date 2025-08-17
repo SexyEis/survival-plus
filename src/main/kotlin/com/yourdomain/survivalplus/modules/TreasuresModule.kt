@@ -9,11 +9,12 @@ import net.kyori.adventure.text.format.TextDecoration
 import org.bukkit.*
 import org.bukkit.block.Block
 import org.bukkit.entity.*
+import org.bukkit.entity.Display.Billboard
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
 import org.bukkit.event.block.BlockBreakEvent
-import org.bukkit.event.player.PlayerInteractAtEntityEvent
+import org.bukkit.event.player.PlayerInteractEntityEvent
 import org.bukkit.inventory.Inventory
 import org.bukkit.inventory.ItemStack
 import org.bukkit.inventory.meta.PotionMeta
@@ -25,7 +26,6 @@ import org.bukkit.scheduler.BukkitTask
 import org.bukkit.util.Transformation
 import org.joml.AxisAngle4f
 import org.joml.Vector3f
-import java.net.URL
 import java.util.*
 import kotlin.random.Random
 
@@ -90,7 +90,7 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
 
     override fun disable() {
         org.bukkit.event.HandlerList.unregisterAll(this)
-        activeTreasures.keys.toList().forEach { removeTreasure(it) }
+        activeTreasures.keys.toList().forEach { removeTreasure(it, emptyList()) }
     }
 
     fun isTreasure(block: Block): Boolean {
@@ -128,8 +128,8 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
         }
     }
 
-    @EventHandler
-    fun onPlayerInteract(event: PlayerInteractAtEntityEvent) {
+    @EventHandler(priority = EventPriority.HIGHEST)
+    fun onPlayerInteract(event: PlayerInteractEntityEvent) {
         val player = event.player
         val entity = event.rightClicked
         if (entity !is Interaction) return
@@ -148,7 +148,7 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
         removeTreasure(location, remainingItems)
     }
 
-    private fun removeTreasure(location: Location, itemsToDrop: List<ItemStack>? = null) {
+    private fun removeTreasure(location: Location, itemsToDrop: List<ItemStack>) {
         activeTreasures.remove(location)?.let {
             it.itemDisplay.remove()
             it.interaction.remove()
@@ -156,8 +156,7 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
             it.timerHologram.remove()
             it.particleTask.cancel()
 
-            val items = itemsToDrop ?: it.loot
-            items.forEach { item ->
+            itemsToDrop.forEach { item ->
                 location.world.dropItemNaturally(location, item)
             }
             location.block.type = Material.AIR
@@ -194,19 +193,21 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
         block.type = Material.BARRIER
 
         val headStack = createPlayerHead(rarity)
-        val itemDisplay = world.spawn(location.clone().add(0.5, 0.0, 0.5), ItemDisplay::class.java) {
+        val itemDisplay = world.spawn(location.clone().add(0.5, 0.5, 0.5), ItemDisplay::class.java) {
             it.itemStack = headStack
+            it.billboard = Billboard.FIXED
+            it.teleportDuration = 0
             it.transformation = Transformation(
-                Vector3f(0f, 0f, 0f), // translation
+                Vector3f(0f, -0.5f, 0f), // translation
                 AxisAngle4f(0f, 0f, 0f, 1f), // left rotation
-                Vector3f(0.5f, 0.5f, 0.5f), // scale
+                Vector3f(2f, 2f, 2f), // scale
                 AxisAngle4f(0f, 0f, 0f, 1f) // right rotation
             )
         }
 
-        val interaction = world.spawn(location.clone().add(0.5, 0.25, 0.5), Interaction::class.java) {
-            it.setInteractionHeight(0.5f)
-            it.setInteractionWidth(0.5f)
+        val interaction = world.spawn(location.clone().add(0.5, 0.5, 0.5), Interaction::class.java) {
+            it.interactionHeight = 1.0f
+            it.interactionWidth = 1.0f
         }
 
         val holograms = spawnHolograms(location, rarity)
@@ -221,7 +222,7 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
             object : BukkitRunnable() {
                 override fun run() {
                     if (activeTreasures.containsKey(location)) {
-                        removeTreasure(location)
+                        removeTreasure(location, emptyList())
                     }
                 }
             }.runTaskLater(plugin, 20L * despawnTimer)
