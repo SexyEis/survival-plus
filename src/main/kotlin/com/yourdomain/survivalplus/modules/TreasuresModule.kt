@@ -4,13 +4,7 @@ import com.yourdomain.survivalplus.SurvivalPlus
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.format.TextDecoration
-import org.bukkit.GameMode
-import org.bukkit.Material
-import com.destroystokyo.paper.ParticleBuilder
-import org.bukkit.Color
-import org.bukkit.Location
-import org.bukkit.Particle
-import org.bukkit.Sound
+import org.bukkit.*
 import org.bukkit.block.Block
 import org.bukkit.block.Chest
 import org.bukkit.entity.ArmorStand
@@ -19,6 +13,9 @@ import org.bukkit.event.EventHandler
 import org.bukkit.event.Listener
 import org.bukkit.event.block.BlockBreakEvent
 import org.bukkit.inventory.ItemStack
+import org.bukkit.inventory.meta.PotionMeta
+import org.bukkit.potion.PotionEffect
+import org.bukkit.potion.PotionEffectType
 import org.bukkit.scheduler.BukkitRunnable
 import org.bukkit.scheduler.BukkitTask
 import java.util.*
@@ -38,7 +35,7 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
         loadConfig()
     }
 
-    private fun loadConfig() {
+    fun loadConfig() {
         val config = plugin.configManager.getModuleConfig(getName().lowercase()) ?: return
         spawnChance = config.getDouble("global-settings.spawn-chance", 0.001)
         findCooldown = config.getLong("global-settings.find-cooldown", 60)
@@ -47,7 +44,6 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
         rarityChances = if (chancesSection != null) {
             chancesSection.getKeys(false).associateWith { chancesSection.getDouble(it) }
         } else {
-            // Default values in case the config is missing this section
             mapOf("normal" to 0.50, "rare" to 0.25, "epic" to 0.15, "legendary" to 0.08, "mythic" to 0.02)
         }
     }
@@ -78,7 +74,6 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
         if (block.type == Material.CHEST && activeTreasures.containsKey(block)) {
             val chest = block.state as? Chest
             if (chest != null) {
-                // Drop the loot manually
                 chest.inventory.contents.forEach { item ->
                     if (item != null) {
                         block.world.dropItemNaturally(block.location, item)
@@ -86,9 +81,8 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
                 }
                 chest.inventory.clear()
             }
-
             removeTreasure(block, true)
-            event.isDropItems = false // Prevent the chest block from dropping
+            event.isDropItems = false
             return
         }
 
@@ -107,9 +101,6 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
 
         val rarity = getRandomRarity() ?: return
         val blockLocation = block.location.clone()
-
-        // Spawn the chest with a 1-tick delay to avoid conflicts with other plugins
-        // that might be listening to the same BlockBreakEvent.
         object : BukkitRunnable() {
             override fun run() {
                 spawnTreasureChest(player, blockLocation.block, rarity)
@@ -145,6 +136,7 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
 
     private fun spawnTreasureChest(player: Player, block: Block, rarity: String) {
         val originalType = block.type
+        if (originalType.isAir) return
         block.type = Material.CHEST
 
         val hologram = spawnHologram(block, rarity)
@@ -157,7 +149,7 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
             object : BukkitRunnable() {
                 override fun run() {
                     if (activeTreasures.containsKey(block)) {
-                       removeTreasure(block)
+                        removeTreasure(block)
                     }
                 }
             }.runTaskLater(plugin, 20L * 60 * 5) // 5 minutes
@@ -170,21 +162,91 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
         plugin.logger.info("A '$rarity' treasure chest spawned for ${player.name}!")
     }
 
+    private data class PotionEffectRule(val type: PotionEffectType, val amplifier: Int, val duration: Int)
+    private data class LootRule(
+        val itemString: String,
+        val biomes: List<String>,
+        val rarities: List<String>,
+        val amountRange: IntRange,
+        val chance: Double,
+        val nbt: String?,
+        val potionEffects: List<PotionEffectRule>
+    )
+
+    private fun parseLootRule(rawString: String): LootRule? {
+        try {
+            val parts = rawString.split("#").map { it.trim() }
+            val itemPart = parts[0]
+            val tags = parts.drop(1)
+
+            val nbtIndex = itemPart.indexOf('{')
+            val plainItemString = (if (nbtIndex != -1) itemPart.substring(0, nbtIndex) else itemPart).trim()
+            val nbtString = if (nbtIndex != -1) itemPart.substring(nbtIndex) else null
+
+            var biomes = listOf("all")
+            var rarities = listOf("all")
+            var amountRange = 1..1
+            var chance = 1.0
+            var potionEffects = emptyList<PotionEffectRule>()
+
+            tags.forEach { tag ->
+                val tagParts = tag.split(":", limit = 2)
+                if (tagParts.size == 2) {
+                    val key = tagParts[0].lowercase()
+                    val value = tagParts[1]
+                    when (key) {
+                        "b" -> biomes = value.split(",").map { it.trim() }
+                        "r" -> rarities = value.split(",").map { it.trim() }
+                        "a" -> {
+                            val amountParts = value.split("-")
+                            amountRange = if (amountParts.size == 2) {
+                                amountParts[0].toInt()..amountParts[1].toInt()
+                            } else {
+                                val amount = value.toInt()
+                                amount..amount
+                            }
+                        }
+                        "c" -> chance = value.toDouble()
+                        "pe" -> {
+                            potionEffects = value.split(",").mapNotNull { effectString ->
+                                val effectParts = effectString.trim().split("_")
+                                if (effectParts.size == 3) {
+                                    val type = PotionEffectType.getByName(effectParts[0].uppercase()) ?: return@mapNotNull null
+                                    val amplifier = effectParts[1].toInt()
+                                    val duration = effectParts[2].toInt() * 20 // Convert seconds to ticks
+                                    PotionEffectRule(type, amplifier, duration)
+                                } else null
+                            }
+                        }
+                    }
+                }
+            }
+            return LootRule(plainItemString, biomes, rarities, amountRange, chance, nbtString, potionEffects)
+        } catch (e: Exception) {
+            plugin.logger.warning("[Treasures] Failed to parse loot rule: '$rawString'. Error: ${e.message}")
+            return null
+        }
+    }
+
     private fun populateChest(block: Block, rarity: String) {
         val chest = block.state as? Chest ?: return
         val inventory = chest.inventory
-        val biome = block.biome.key().key()
+        val biome = block.biome.key.key
 
         val config = plugin.configManager.getModuleConfig(getName().lowercase()) ?: return
-        val lootConfigSection = config.getConfigurationSection("loot-tables") ?: return
+        val allLootRules = config.getStringList("loot-pool").mapNotNull { parseLootRule(it) }
 
-        val lootList = lootConfigSection.getStringList("$biome.$rarity")
-            .ifEmpty { lootConfigSection.getStringList("default.$rarity") }
+        val applicableRules = allLootRules.filter { rule ->
+            (rule.rarities.contains("all") || rule.rarities.contains(rarity)) &&
+                    (rule.biomes.contains("all") || rule.biomes.contains(biome))
+        }
 
-        if (lootList.isEmpty()) {
-            plugin.logger.warning("[Treasures] No loot table found for rarity '$rarity' in biome '$biome' or in default.")
+        if (applicableRules.isEmpty()) {
+            plugin.logger.warning("[Treasures] No applicable loot rules found for rarity '$rarity' in biome '$biome'.")
             return
         }
+
+        val itemsToGenerate = applicableRules.filter { Random.nextDouble() < it.chance }
 
         val itemCount = when (rarity.lowercase()) {
             "normal" -> Random.nextInt(2, 4)
@@ -195,62 +257,35 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
             else -> 0
         }
 
-        val possibleItems = lootList.mapNotNull { parseLootString(it) }
-        if (possibleItems.isEmpty()) return
-
         val availableSlots = (0 until inventory.size).toMutableList()
         repeat(itemCount.coerceAtMost(27)) {
-            if (availableSlots.isEmpty() || possibleItems.isEmpty()) return
+            if (availableSlots.isEmpty() || itemsToGenerate.isEmpty()) return
 
-            val item = possibleItems.random()
+            val rule = itemsToGenerate.random()
+            val material = Material.matchMaterial(rule.itemString) ?: return@repeat
+            val amount = Random.nextInt(rule.amountRange.first, rule.amountRange.last + 1)
+            val item = ItemStack(material, amount)
+
+            if (item.itemMeta is PotionMeta && rule.potionEffects.isNotEmpty()) {
+                val potionMeta = item.itemMeta as PotionMeta
+                rule.potionEffects.forEach { effectRule ->
+                    potionMeta.addCustomEffect(PotionEffect(effectRule.type, effectRule.duration, effectRule.amplifier), true)
+                }
+                item.itemMeta = potionMeta
+            }
+
+            if (rule.nbt != null) {
+                try {
+                    @Suppress("DEPRECATION")
+                    plugin.server.getUnsafe().modifyItemStack(item, rule.nbt)
+                } catch (e: Exception) {
+                    plugin.logger.warning("Failed to apply NBT to item ${material.name}: ${e.message}")
+                }
+            }
+
             val slot = availableSlots.random()
             availableSlots.remove(slot)
-
             inventory.setItem(slot, item)
-        }
-    }
-
-    @Suppress("DEPRECATION")
-    private fun parseLootString(lootString: String): ItemStack? {
-        try {
-            val nbtIndex = lootString.indexOf('{')
-            val plainString = (if (nbtIndex != -1) lootString.substring(0, nbtIndex) else lootString).trim()
-            val nbtString = if (nbtIndex != -1) lootString.substring(nbtIndex) else null
-
-            if (plainString.isBlank()) {
-                return null
-            }
-
-            val parts = plainString.split(Regex("\\s+"))
-            val materialName = parts.getOrNull(0)?.uppercase() ?: return null
-            val material = Material.matchMaterial(materialName) ?: return null
-
-            val quantityString = parts.getOrNull(1)
-            val quantity = if (quantityString != null) {
-                val quantityRange = quantityString.split("-")
-                if (quantityRange.size == 2) {
-                    try {
-                        Random.nextInt(quantityRange[0].toInt(), quantityRange[1].toInt() + 1)
-                    } catch (e: NumberFormatException) {
-                        1
-                    }
-                } else {
-                    quantityString.toIntOrNull() ?: 1
-                }
-            } else {
-                1
-            }
-
-            val item = ItemStack(material, quantity)
-
-            if (nbtString != null) {
-                plugin.server.getUnsafe().modifyItemStack(item, nbtString)
-            }
-
-            return item
-        } catch (e: Exception) {
-            plugin.logger.warning("[Treasures] Failed to parse loot string: '$lootString'. Error: ${e.message}")
-            return null
         }
     }
 
@@ -300,7 +335,6 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
                     return
                 }
 
-                val angle = tick * (Math.PI / 180)
                 val angle_fast = tick * 5 * (Math.PI / 180)
                 val angle_slow = tick * 0.5 * (Math.PI / 180)
 
