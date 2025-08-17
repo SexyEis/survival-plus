@@ -38,8 +38,9 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
         val timerHologram: ArmorStand,
         val particleTask: BukkitTask,
         val despawnTime: Long,
-        val loot: List<ItemStack>,
-        val rarity: String
+        var loot: List<ItemStack>,
+        val rarity: String,
+        var opened: Boolean = false
     )
     private val activeTreasures = mutableMapOf<Location, Treasure>()
     private val openGUIs = mutableMapOf<UUID, Location>()
@@ -47,7 +48,7 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
     private val playerCooldowns = mutableMapOf<UUID, Long>()
     private var spawnChance = 0.001
     private var findCooldown = 60L
-    private var despawnTimer = 60L
+    private var despawnTimer = 20L
     private var broadcastSound = false
     private lateinit var rarityChances: Map<String, Double>
     private lateinit var messageSettings: Map<String, String>
@@ -63,7 +64,7 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
         val config = plugin.configManager.getModuleConfig(getName().lowercase()) ?: return
         spawnChance = config.getDouble("global-settings.spawn-chance", 0.001)
         findCooldown = config.getLong("global-settings.find-cooldown", 60)
-        despawnTimer = config.getLong("global-settings.despawn-timer", 60)
+        despawnTimer = config.getLong("global-settings.despawn-timer", 20L)
         broadcastSound = config.getBoolean("global-settings.broadcast-sound", false)
 
         rarityChances = config.getConfigurationSection("rarity-chances")?.getKeys(false)
@@ -90,7 +91,9 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
 
     override fun disable() {
         org.bukkit.event.HandlerList.unregisterAll(this)
-        activeTreasures.keys.toList().forEach { removeTreasure(it, emptyList()) }
+        activeTreasures.values.toList().forEach { treasure ->
+            removeTreasure(treasure.itemDisplay.location, treasure.loot)
+        }
     }
 
     fun isTreasure(block: Block): Boolean {
@@ -134,18 +137,29 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
         val entity = event.rightClicked
         if (entity !is Interaction) return
 
-        val treasureLocation = activeTreasures.entries.find { (_, treasure) -> treasure.interaction == entity }?.key ?: return
+        val treasureLocation = entity.location.toBlockLocation()
         val treasure = activeTreasures[treasureLocation] ?: return
 
         event.isCancelled = true
+
+        if (!treasure.opened) {
+            treasure.opened = true
+        }
+
         openGUIs[player.uniqueId] = treasureLocation
         gui.open(player, treasure.loot, treasure.rarity)
     }
 
     fun handleGUIClosure(player: Player, inventory: Inventory) {
         val location = openGUIs.remove(player.uniqueId) ?: return
+        val treasure = activeTreasures[location] ?: return
+
         val remainingItems = inventory.contents.filterNotNull()
-        removeTreasure(location, remainingItems)
+        treasure.loot = remainingItems
+
+        if (remainingItems.isEmpty()) {
+            removeTreasure(location, emptyList())
+        }
     }
 
     private fun removeTreasure(location: Location, itemsToDrop: List<ItemStack>) {
@@ -193,21 +207,20 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
         block.type = Material.BARRIER
 
         val headStack = createPlayerHead(rarity)
-        val itemDisplay = world.spawn(location.clone().add(0.5, 0.5, 0.5), ItemDisplay::class.java) {
+        val itemDisplay = world.spawn(location.clone().add(0.5, 0.25, 0.5), ItemDisplay::class.java) {
             it.itemStack = headStack
             it.billboard = Billboard.FIXED
-            it.teleportDuration = 0
             it.transformation = Transformation(
-                Vector3f(0f, -0.5f, 0f), // translation
-                AxisAngle4f(0f, 0f, 0f, 1f), // left rotation
-                Vector3f(2f, 2f, 2f), // scale
-                AxisAngle4f(0f, 0f, 0f, 1f) // right rotation
+                Vector3f(0f, 0f, 0f),
+                AxisAngle4f(0f, 0f, 0f, 1f),
+                Vector3f(1.5f, 1.5f, 1.5f),
+                AxisAngle4f(0f, 0f, 0f, 1f)
             )
         }
 
         val interaction = world.spawn(location.clone().add(0.5, 0.5, 0.5), Interaction::class.java) {
-            it.interactionHeight = 1.0f
-            it.interactionWidth = 1.0f
+            it.interactionHeight = 1f
+            it.interactionWidth = 1f
         }
 
         val holograms = spawnHolograms(location, rarity)
@@ -217,11 +230,15 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
         if (holograms != null) {
             val (nameHologram, timerHologram) = holograms
             val despawnTimeMillis = System.currentTimeMillis() + despawnTimer * 1000
-            activeTreasures[location] = Treasure(itemDisplay, interaction, nameHologram, timerHologram, particleTask, despawnTimeMillis, loot, rarity)
+            val treasure = Treasure(itemDisplay, interaction, nameHologram, timerHologram, particleTask, despawnTimeMillis, loot, rarity)
+            activeTreasures[location] = treasure
 
             object : BukkitRunnable() {
                 override fun run() {
-                    if (activeTreasures.containsKey(location)) {
+                    val currentTreasure = activeTreasures[location] ?: return
+                    if (!currentTreasure.opened) {
+                        removeTreasure(location, currentTreasure.loot)
+                    } else {
                         removeTreasure(location, emptyList())
                     }
                 }

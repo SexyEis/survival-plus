@@ -5,8 +5,8 @@ global-settings:
   spawn-chance: 0.001
   # Cooldown in seconds before a player can find another chest.
   find-cooldown: 60
-  # Time in seconds before a treasure chest despawns and drops its items.
-  despawn-timer: 60
+  # Time in seconds before a treasure chest despawns.
+  despawn-timer: 20
   # Whether to broadcast treasure sounds to the entire server. If false, only the finder will hear it.
   broadcast-sound: false
 
