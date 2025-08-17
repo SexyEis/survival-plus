@@ -76,8 +76,19 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
         val block = event.block
 
         if (block.type == Material.CHEST && activeTreasures.containsKey(block)) {
+            val chest = block.state as? Chest
+            if (chest != null) {
+                // Drop the loot manually
+                chest.inventory.contents.forEach { item ->
+                    if (item != null) {
+                        block.world.dropItemNaturally(block.location, item)
+                    }
+                }
+                chest.inventory.clear()
+            }
+
             removeTreasure(block, true)
-            event.isDropItems = false
+            event.isDropItems = false // Prevent the chest block from dropping
             return
         }
 
@@ -96,6 +107,7 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
 
         val rarity = getRandomRarity() ?: return
         spawnTreasureChest(player, block, rarity)
+        event.isCancelled = true // Cancel the event to prevent the original block from being broken
 
         playerCooldowns[player.uniqueId] = System.currentTimeMillis()
     }
