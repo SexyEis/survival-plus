@@ -30,6 +30,7 @@ class CommandManager(private val plugin: SurvivalPlus) : CommandExecutor, TabCom
             "help" -> sendHelpMessage(sender)
             "list" -> listModules(sender)
             "toggle" -> toggleModule(sender, args)
+            "reload" -> reloadPlugin(sender)
             else -> sender.sendMessage(Component.text("Unknown subcommand. Use /sp help for a list of commands.", NamedTextColor.RED))
         }
 
@@ -39,7 +40,7 @@ class CommandManager(private val plugin: SurvivalPlus) : CommandExecutor, TabCom
     override fun onTabComplete(sender: CommandSender, command: Command, alias: String, args: Array<out String>): MutableList<String> {
         val completions = mutableListOf<String>()
         if (args.size == 1) {
-            completions.addAll(listOf("help", "list", "toggle").filter { it.startsWith(args[0], ignoreCase = true) })
+            completions.addAll(listOf("help", "list", "toggle", "reload").filter { it.startsWith(args[0], ignoreCase = true) })
         } else if (args.size == 2 && args[0].equals("toggle", ignoreCase = true)) {
             completions.addAll(plugin.moduleManager.getModules().map { it.getName() }.filter { it.startsWith(args[1], ignoreCase = true) })
         }
@@ -51,7 +52,13 @@ class CommandManager(private val plugin: SurvivalPlus) : CommandExecutor, TabCom
         sender.sendMessage(Component.text("/sp help ", NamedTextColor.YELLOW).append(Component.text("- Shows this help message.", NamedTextColor.GRAY)))
         sender.sendMessage(Component.text("/sp list ", NamedTextColor.YELLOW).append(Component.text("- Lists all modules and their status.", NamedTextColor.GRAY)))
         sender.sendMessage(Component.text("/sp toggle <module> ", NamedTextColor.YELLOW).append(Component.text("- Toggles a module on or off.", NamedTextColor.GRAY)))
+        sender.sendMessage(Component.text("/sp reload ", NamedTextColor.YELLOW).append(Component.text("- Reloads the plugin's configuration.", NamedTextColor.GRAY)))
         sender.sendMessage(Component.text("/spmenu ", NamedTextColor.YELLOW).append(Component.text("- Opens the GUI menu.", NamedTextColor.GRAY)))
+    }
+
+    private fun reloadPlugin(sender: CommandSender) {
+        plugin.moduleManager.reloadModules()
+        sender.sendMessage(Component.text("SurvivalPlus configuration reloaded.", NamedTextColor.GREEN))
     }
 
     private fun listModules(sender: CommandSender) {

@@ -63,4 +63,35 @@ class ModuleManager(private val plugin: SurvivalPlus) {
         val moduleName = name.lowercase()
         return plugin.configManager.mainConfig.getBoolean("modules.$moduleName.enabled", true)
     }
+
+    fun reloadModules() {
+        plugin.configManager.reloadMainConfig()
+
+        modules.values.forEach { module ->
+            val moduleName = module.getName().lowercase()
+            val wasEnabled = isModuleEnabled(moduleName)
+            val shouldBeEnabled = plugin.configManager.mainConfig.getBoolean("modules.$moduleName.enabled", true)
+
+            when {
+                !wasEnabled && shouldBeEnabled -> {
+                    plugin.configManager.loadModuleConfig(moduleName)
+                    module.enable()
+                    plugin.logger.info("Module '${module.getName()}' enabled.")
+                }
+                wasEnabled && !shouldBeEnabled -> {
+                    module.disable()
+                    plugin.configManager.unloadModuleConfig(moduleName)
+                    plugin.logger.info("Module '${module.getName()}' disabled.")
+                }
+                wasEnabled && shouldBeEnabled -> {
+                    // Reload the module by disabling and enabling it
+                    module.disable()
+                    plugin.configManager.unloadModuleConfig(moduleName)
+                    plugin.configManager.loadModuleConfig(moduleName)
+                    module.enable()
+                    plugin.logger.info("Module '${module.getName()}' reloaded.")
+                }
+            }
+        }
+    }
 }

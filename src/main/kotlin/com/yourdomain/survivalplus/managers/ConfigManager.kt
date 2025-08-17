@@ -44,12 +44,8 @@ class ConfigManager(private val plugin: SurvivalPlus) {
         return moduleConfigs[moduleName]
     }
 
-    fun reloadAllConfigs() {
+    fun reloadMainConfig() {
         plugin.reloadConfig()
         mainConfig = plugin.config
-
-        val reloadedModules = moduleConfigs.keys.toList()
-        moduleConfigs.clear()
-        reloadedModules.forEach { loadModuleConfig(it) }
     }
 }
