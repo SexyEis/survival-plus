@@ -71,4 +71,15 @@ class ToolStorageGUI(private val plugin: SurvivalPlus, private val toolStorageMo
             }
         }
     }
+
+    @EventHandler
+    fun onInventoryClose(event: InventoryCloseEvent) {
+        if (event.view.title() == inventoryTitle) {
+            val player = event.player as? Player ?: return
+            // Remove from cooldown after a short delay
+            plugin.server.scheduler.runTaskLater(plugin, Runnable {
+                toolStorageModule.cooldowns.remove(player.uniqueId)
+            }, 2L) // 2 ticks delay
+        }
+    }
 }

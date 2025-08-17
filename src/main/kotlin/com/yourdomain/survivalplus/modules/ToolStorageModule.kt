@@ -12,9 +12,11 @@ import org.bukkit.event.block.BlockBreakEvent
 import org.bukkit.event.player.PlayerInteractEvent
 import org.bukkit.inventory.ItemStack
 import org.bukkit.persistence.PersistentDataType
+import java.util.*
 
 class ToolStorageModule(private val plugin: SurvivalPlus) : Module, Listener {
 
+    val cooldowns = mutableSetOf<UUID>()
     private val gson = Gson()
     private val storageKey = NamespacedKey(plugin, "tool_storage_inventory")
 
@@ -87,6 +89,10 @@ class ToolStorageModule(private val plugin: SurvivalPlus) : Module, Listener {
         if (event.action.isLeftClick) return
 
         val player = event.player
+        if (cooldowns.contains(player.uniqueId)) {
+            return
+        }
+
         val item = player.inventory.itemInMainHand
         if (item.type == Material.AIR) return
 
@@ -95,6 +101,7 @@ class ToolStorageModule(private val plugin: SurvivalPlus) : Module, Listener {
             if (player.isSneaking) return // To avoid conflict with Ultimine GUI
 
             event.isCancelled = true
+            cooldowns.add(player.uniqueId) // Add to cooldown
             gui.open(player, item)
         }
     }
