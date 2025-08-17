@@ -12,14 +12,15 @@ class ModuleManager(private val plugin: SurvivalPlus) {
     }
 
     fun initialModuleToggle() {
-        val config = plugin.configManager.getConfig()
+        val config = plugin.configManager.mainConfig
         modules.values.forEach { module ->
             val moduleName = module.getName().lowercase()
             if (config.getBoolean("modules.$moduleName.enabled", true)) {
+                plugin.configManager.loadModuleConfig(moduleName)
                 module.enable()
                 plugin.logger.info("Module '${module.getName()}' enabled.")
             } else {
-                module.disable() // Make sure to call disable so listeners are unregistered etc.
+                module.disable()
                 plugin.logger.info("Module '${module.getName()}' is disabled by config.")
             }
         }
@@ -40,25 +41,26 @@ class ModuleManager(private val plugin: SurvivalPlus) {
     fun toggleModule(name: String): Boolean {
         val module = getModule(name) ?: return false
         val moduleName = module.getName().lowercase()
-        val config = plugin.configManager.getConfig()
+        val config = plugin.configManager.mainConfig
         val isEnabled = config.getBoolean("modules.$moduleName.enabled", true)
 
         config.set("modules.$moduleName.enabled", !isEnabled)
         plugin.saveConfig()
-        // No need to call plugin.configManager.reload() here, the config object is mutable
 
         if (!isEnabled) {
+            plugin.configManager.loadModuleConfig(moduleName)
             module.enable()
             plugin.logger.info("Module '${module.getName()}' has been enabled.")
         } else {
             module.disable()
+            plugin.configManager.unloadModuleConfig(moduleName)
             plugin.logger.info("Module '${module.getName()}' has been disabled.")
         }
         return true
     }
 
     fun isModuleEnabled(name: String): Boolean {
-        val module = getModule(name) ?: return false
-        return plugin.configManager.getConfig().getBoolean("modules.${module.getName().lowercase()}.enabled", true)
+        val moduleName = name.lowercase()
+        return plugin.configManager.mainConfig.getBoolean("modules.$moduleName.enabled", true)
     }
 }

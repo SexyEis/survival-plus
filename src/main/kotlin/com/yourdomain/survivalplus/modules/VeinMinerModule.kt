@@ -20,18 +20,23 @@ class VeinMinerModule(private val plugin: SurvivalPlus) : Module, Listener {
     private val processingBlocks = ThreadLocal.withInitial { mutableSetOf<Block>() }
     private val mineableOres = mutableSetOf<Material>()
 
+    private var maxBlocks: Int = 64
+
     init {
         loadConfig()
     }
 
-    fun loadConfig() {
-        mineableOres.clear()
-        val oreNames = plugin.config.getStringList("modules.vein-miner.mineable-ores")
-        for (name in oreNames) {
-            try {
-                mineableOres.add(Material.valueOf(name.uppercase()))
-            } catch (e: IllegalArgumentException) {
-                plugin.logger.warning("[VeinMiner] Invalid material name in config: $name")
+    private fun loadConfig() {
+        plugin.configManager.getModuleConfig(name.lowercase())?.let { config ->
+            maxBlocks = config.getInt("max-blocks", 64)
+            mineableOres.clear()
+            val oreNames = config.getStringList("mineable-ores")
+            for (name in oreNames) {
+                try {
+                    mineableOres.add(Material.valueOf(name.uppercase()))
+                } catch (e: IllegalArgumentException) {
+                    plugin.logger.warning("[VeinMiner] Invalid material name in config: $name")
+                }
             }
         }
     }
@@ -68,8 +73,7 @@ class VeinMinerModule(private val plugin: SurvivalPlus) : Module, Listener {
             return
         }
 
-        val maxBlocks = plugin.config.getInt("modules.vein-miner.max-blocks", 64)
-        val vein = findVein(originalBlock, maxBlocks)
+        val vein = findVein(originalBlock, this.maxBlocks)
 
         if (vein.size <= 1) {
             return

@@ -24,26 +24,32 @@ class TimberModule(private val plugin: SurvivalPlus) : Module, Listener {
     private val logTypes = mutableSetOf<Material>()
     private val leafTypes = mutableSetOf<Material>()
 
+    private var maxLogs: Int = 256
+    private var leafSearchRadius: Int = 6
+
     init {
         loadConfig()
     }
 
-    fun loadConfig() {
-        logTypes.clear()
-        plugin.config.getStringList("modules.timber.log-types").forEach {
-            try {
-                logTypes.add(Material.valueOf(it.uppercase()))
-            } catch (e: IllegalArgumentException) {
-                plugin.logger.warning("[Timber] Invalid log material name in config: $it")
+    private fun loadConfig() {
+        plugin.configManager.getModuleConfig(name.lowercase())?.let { config ->
+            maxLogs = config.getInt("max-logs", 256)
+            leafSearchRadius = config.getInt("leaf-search-radius", 6)
+            logTypes.clear()
+            config.getStringList("log-types").forEach {
+                try {
+                    logTypes.add(Material.valueOf(it.uppercase()))
+                } catch (e: IllegalArgumentException) {
+                    plugin.logger.warning("[Timber] Invalid log material name in config: $it")
+                }
             }
-        }
-
-        leafTypes.clear()
-        plugin.config.getStringList("modules.timber.leaf-types").forEach {
-            try {
-                leafTypes.add(Material.valueOf(it.uppercase()))
-            } catch (e: IllegalArgumentException) {
-                plugin.logger.warning("[Timber] Invalid leaf material name in config: $it")
+            leafTypes.clear()
+            config.getStringList("leaf-types").forEach {
+                try {
+                    leafTypes.add(Material.valueOf(it.uppercase()))
+                } catch (e: IllegalArgumentException) {
+                    plugin.logger.warning("[Timber] Invalid leaf material name in config: $it")
+                }
             }
         }
     }
@@ -131,7 +137,6 @@ class TimberModule(private val plugin: SurvivalPlus) : Module, Listener {
     }
 
     private fun findTree(startBlock: Block): Pair<Set<Block>, Set<Block>> {
-        val maxLogs = plugin.config.getInt("modules.timber.max-logs", 256)
         val logs = mutableSetOf<Block>()
         val leaves = mutableSetOf<Block>()
 
@@ -142,7 +147,7 @@ class TimberModule(private val plugin: SurvivalPlus) : Module, Listener {
         visited.add(startBlock)
 
         // Find all connected logs
-        while (toVisit.isNotEmpty() && logs.size < maxLogs) {
+        while (toVisit.isNotEmpty() && logs.size < this.maxLogs) {
             val current = toVisit.removeFirst()
             if (current.type in logTypes) {
                 logs.add(current)
@@ -161,11 +166,10 @@ class TimberModule(private val plugin: SurvivalPlus) : Module, Listener {
         }
 
         // Find all leaves within a configured radius of any log
-        val leafSearchRadius = plugin.config.getInt("modules.timber.leaf-search-radius", 6)
         for (log in logs) {
-            for (x in -leafSearchRadius..leafSearchRadius) {
-                for (y in -leafSearchRadius..leafSearchRadius) {
-                    for (z in -leafSearchRadius..leafSearchRadius) {
+            for (x in -this.leafSearchRadius..this.leafSearchRadius) {
+                for (y in -this.leafSearchRadius..this.leafSearchRadius) {
+                    for (z in -this.leafSearchRadius..this.leafSearchRadius) {
                         val block = log.getRelative(x, y, z)
                         if (block.type in leafTypes) {
                             leaves.add(block)

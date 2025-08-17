@@ -39,14 +39,15 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
     }
 
     private fun loadConfig() {
-        val config = plugin.configManager.getConfig()
-        spawnChance = config.getDouble("modules.treasures.global-settings.spawn-chance", 0.001)
-        findCooldown = config.getLong("modules.treasures.global-settings.find-cooldown", 60)
+        val config = plugin.configManager.getModuleConfig(name.lowercase()) ?: return
+        spawnChance = config.getDouble("global-settings.spawn-chance", 0.001)
+        findCooldown = config.getLong("global-settings.find-cooldown", 60)
 
-        val chancesSection = config.getConfigurationSection("modules.treasures.rarity-chances")
+        val chancesSection = config.getConfigurationSection("rarity-chances")
         rarityChances = if (chancesSection != null) {
             chancesSection.getKeys(false).associateWith { chancesSection.getDouble(it) }
         } else {
+            // Default values in case the config is missing this section
             mapOf("normal" to 0.50, "rare" to 0.25, "epic" to 0.15, "legendary" to 0.08, "mythic" to 0.02)
         }
     }
@@ -155,7 +156,8 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
         val inventory = chest.inventory
         val biome = block.biome.key().key()
 
-        val lootConfigSection = plugin.configManager.getConfig().getConfigurationSection("modules.treasures.loot-tables") ?: return
+        val config = plugin.configManager.getModuleConfig(name.lowercase()) ?: return
+        val lootConfigSection = config.getConfigurationSection("loot-tables") ?: return
 
         val lootList = lootConfigSection.getStringList("$biome.$rarity")
             .ifEmpty { lootConfigSection.getStringList("default.$rarity") }
@@ -193,18 +195,31 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
     private fun parseLootString(lootString: String): ItemStack? {
         try {
             val nbtIndex = lootString.indexOf('{')
-            val plainString = if (nbtIndex != -1) lootString.substring(0, nbtIndex).trim() else lootString
+            val plainString = (if (nbtIndex != -1) lootString.substring(0, nbtIndex) else lootString).trim()
             val nbtString = if (nbtIndex != -1) lootString.substring(nbtIndex) else null
 
-            val parts = plainString.split(" ")
+            if (plainString.isBlank()) {
+                return null
+            }
+
+            val parts = plainString.split(Regex("\\s+"))
             val materialName = parts.getOrNull(0)?.uppercase() ?: return null
             val material = Material.matchMaterial(materialName) ?: return null
 
-            val quantityRange = parts.getOrNull(1)?.split("-")
-            val quantity = if (quantityRange != null && quantityRange.size == 2) {
-                Random.nextInt(quantityRange[0].toInt(), quantityRange[1].toInt() + 1)
+            val quantityString = parts.getOrNull(1)
+            val quantity = if (quantityString != null) {
+                val quantityRange = quantityString.split("-")
+                if (quantityRange.size == 2) {
+                    try {
+                        Random.nextInt(quantityRange[0].toInt(), quantityRange[1].toInt() + 1)
+                    } catch (e: NumberFormatException) {
+                        1
+                    }
+                } else {
+                    quantityString.toIntOrNull() ?: 1
+                }
             } else {
-                parts.getOrNull(1)?.toIntOrNull() ?: 1
+                1
             }
 
             val item = ItemStack(material, quantity)

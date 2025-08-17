@@ -36,9 +36,18 @@ class UltimineModule(private val plugin: SurvivalPlus) : Module, Listener {
     override fun getName(): String = "ultimine"
     override fun getDescription(): String = "Adds ultimate mining capabilities with different modes."
 
+    private var maxBlocks: Int = 64
+
     override fun enable() {
         plugin.server.pluginManager.registerEvents(this, plugin)
         gui = UltimineGUI(plugin, this)
+        loadConfig()
+    }
+
+    private fun loadConfig() {
+        plugin.configManager.getModuleConfig(name.lowercase())?.let {
+            maxBlocks = it.getInt("max-blocks", 64)
+        }
     }
 
     override fun disable() {
@@ -141,7 +150,6 @@ class UltimineModule(private val plugin: SurvivalPlus) : Module, Listener {
     }
 
     private fun findAdjacentBlocks(startBlock: Block): Set<Block> {
-        val maxBlocks = plugin.config.getInt("modules.ultimine.max-blocks", 64)
         val toVisit = ArrayDeque<Block>()
         val visited = mutableSetOf<Block>()
         val blocks = mutableSetOf<Block>()
@@ -170,7 +178,6 @@ class UltimineModule(private val plugin: SurvivalPlus) : Module, Listener {
     }
 
     private fun findTreeLikeBlocks(player: Player, startBlock: Block, tool: ItemStack): Set<Block> {
-        val maxBlocks = plugin.config.getInt("modules.ultimine.max-blocks", 64)
         val blocks = mutableSetOf<Block>()
         val toVisit = ArrayDeque<Block>()
         val visited = mutableSetOf<Block>()
@@ -199,7 +206,6 @@ class UltimineModule(private val plugin: SurvivalPlus) : Module, Listener {
     }
 
     private fun findTunnelBlocks(startBlock: Block, direction: BlockFace, width: Int, height: Int, tool: ItemStack): Set<Block> {
-        val maxBlocks = plugin.config.getInt("modules.ultimine.max-blocks", 64)
         val blocks = mutableSetOf<Block>()
         val length = maxBlocks / (width * height)
 
@@ -227,7 +233,6 @@ class UltimineModule(private val plugin: SurvivalPlus) : Module, Listener {
     }
 
     private fun findMaxBreakBlocks(player: Player, startBlock: Block, tool: ItemStack): Set<Block> {
-        val maxBlocks = plugin.config.getInt("modules.ultimine.max-blocks", 64)
         val blocks = mutableSetOf<Block>()
         val toVisit = ArrayDeque<Block>()
         val visited = mutableSetOf<Block>()

@@ -1,0 +1,4 @@
+# Ultimine Module Settings
+
+# The maximum number of blocks that can be broken at once by the ultimine module.
+max-blocks: 64
