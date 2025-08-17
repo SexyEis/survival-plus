@@ -69,11 +69,20 @@ class UltimineModule(private val plugin: SurvivalPlus) : Module, Listener {
     @EventHandler
     fun onPlayerInteract(event: PlayerInteractEvent) {
         val player = event.player
+        val item = player.inventory.itemInMainHand
         if (player.isSneaking && (event.action == Action.RIGHT_CLICK_AIR || event.action == Action.RIGHT_CLICK_BLOCK)) {
-            if (player.inventory.itemInMainHand.type.isEdible || player.inventory.itemInMainHand.type == Material.SHIELD) return
+            if (item.type.isEdible || item.type == Material.SHIELD || !isTool(item)) return
             event.isCancelled = true
             gui.open(player)
         }
+    }
+
+    private fun isTool(item: ItemStack): Boolean {
+        val type = item.type
+        return Tag.ITEMS_PICKAXES.isTagged(type) ||
+                Tag.ITEMS_AXES.isTagged(type) ||
+                Tag.ITEMS_SHOVELS.isTagged(type) ||
+                Tag.ITEMS_HOES.isTagged(type)
     }
 
     @EventHandler(priority = EventPriority.NORMAL, ignoreCancelled = true)

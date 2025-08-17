@@ -3,6 +3,7 @@ package com.yourdomain.survivalplus.modules
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.yourdomain.survivalplus.SurvivalPlus
+import com.yourdomain.survivalplus.modules.UltimineModule
 import org.bukkit.Material
 import org.bukkit.NamespacedKey
 import org.bukkit.event.EventHandler
@@ -98,7 +99,10 @@ class ToolStorageModule(private val plugin: SurvivalPlus) : Module, Listener {
 
         // Basic tool check
         if (item.type.toString().endsWith("_PICKAXE") || item.type.toString().endsWith("_AXE") || item.type.toString().endsWith("_SHOVEL") || item.type.toString().endsWith("_HOE")) {
-            if (player.isSneaking) return // To avoid conflict with Ultimine GUI
+            val ultimineModule = plugin.moduleManager.getModule("ultimine") as? UltimineModule
+            if (player.isSneaking || (ultimineModule != null && ultimineModule.isUltimineActive(player))) {
+                return // To avoid conflict with Ultimine GUI or if ultimine is active
+            }
 
             event.isCancelled = true
             cooldowns.add(player.uniqueId) // Add to cooldown

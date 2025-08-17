@@ -27,6 +27,15 @@ rarity-chances:
   legendary: 0.08
   mythic: 0.02
 
+# Base64 textures for the treasure heads for each rarity.
+# You can get these from sites like https://minecraft-heads.com/
+rarity-head-textures:
+  normal: "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvY2UwYmI3MzE2Y2E1YjQ1M2YzY2YyYjY5YTkyYjU3YWMxY2EzYzY3ZGEwODk0YjQyMGYxM2I4ZDE2Y2M2YjIwMyJ9fX0=" # Oak Wood Box
+  rare: "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvM2Y1YjllYjM5M2M4YjY5YmNmYmY3YjM5YjY5YTkyYjU3YWMxY2EzYzY3ZGEwODk0YjQyMGYxM2I4ZDE2Y2M2YjIwMyJ9fX0=" # Iron Box
+  epic: "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvY2Y4ZDU5ZDYxZDk2OGM5YjQyYjY5YTkyYjU3YWMxY2EzYzY3ZGEwODk0YjQyMGYxM2I4ZDE2Y2M2YjIwMyJ9fX0=" # Gold Box
+  legendary: "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvN2Y4ZDQ4ZDYxZDk2OGM5YjQyYjY5YTkyYjU3YWMxY2EzYzY3ZGEwODk0YjQyMGYxM2I4ZDE2Y2M2YjIwMyJ9fX0=" # Diamond Box
+  mythic: "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvYjM5ZDRhZDYxZDk2OGM5YjQyYjY5YTkyYjU3YWMxY2EzYzY3ZGEwODk0YjQyMGYxM2I4ZDE2Y2M2YjIwMyJ9fX0=" # Netherite Box
+
 # This is the main list of all possible loot.
 # Use tags to control where and how items spawn.
 #
