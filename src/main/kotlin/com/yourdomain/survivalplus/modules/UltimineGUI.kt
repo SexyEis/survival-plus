@@ -33,7 +33,6 @@ class UltimineGUI(private val plugin: SurvivalPlus, private val ultimineModule: 
         inventory.setItem(0, createModeItem(player, UltimineModule.Mode.NORMAL, Material.IRON_PICKAXE, "Normal", "Mines connected blocks of the same type."))
         inventory.setItem(1, createModeItem(player, UltimineModule.Mode.TUNNEL, Material.IRON_SHOVEL, "Tunnel", "Mines a 2x1 tunnel."))
         inventory.setItem(2, createModeItem(player, UltimineModule.Mode.BIG_TUNNEL, Material.DIAMOND_SHOVEL, "Big Tunnel", "Mines a 3x3 tunnel."))
-        inventory.setItem(3, createModeItem(player, UltimineModule.Mode.MAX_BREAK, Material.DIAMOND_PICKAXE, "Max Break", "Breaks blocks until 1 durability remains."))
 
         // Create toggle item
         inventory.setItem(8, createToggleItem(player))

@@ -10,6 +10,7 @@ import org.bukkit.block.Chest
 import org.bukkit.entity.ArmorStand
 import org.bukkit.entity.Player
 import org.bukkit.event.EventHandler
+import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
 import org.bukkit.event.block.BlockBreakEvent
 import org.bukkit.inventory.ItemStack
@@ -66,7 +67,27 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
         return activeTreasures.containsKey(block)
     }
 
-    @EventHandler
+    fun trySpawnTreasure(player: Player, block: Block): Boolean {
+        if (player.gameMode != GameMode.SURVIVAL || isTreasure(block)) {
+            return false
+        }
+
+        val lastFound = playerCooldowns[player.uniqueId]
+        if (lastFound != null && (System.currentTimeMillis() - lastFound) < findCooldown * 1000) {
+            return false
+        }
+
+        if (Random.nextDouble() >= spawnChance) {
+            return false
+        }
+
+        val rarity = getRandomRarity() ?: return false
+        spawnTreasureChest(player, block, rarity)
+        playerCooldowns[player.uniqueId] = System.currentTimeMillis()
+        return true
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     fun onBlockBreak(event: BlockBreakEvent) {
         val player = event.player
         val block = event.block
@@ -86,28 +107,15 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
             return
         }
 
-        if (player.gameMode != GameMode.SURVIVAL) {
-            return
+        val ultimineModule = plugin.moduleManager.getModule("ultimine") as? UltimineModule
+        if (ultimineModule != null && ultimineModule.isUltimineActive(player)) {
+            return // Ultimine will handle treasure spawning
         }
 
-        val lastFound = playerCooldowns[player.uniqueId]
-        if (lastFound != null && (System.currentTimeMillis() - lastFound) < findCooldown * 1000) {
-            return
+        if (trySpawnTreasure(player, block)) {
+            event.isDropItems = false
+            event.expToDrop = 0
         }
-
-        if (Random.nextDouble() > spawnChance) {
-            return
-        }
-
-        val rarity = getRandomRarity() ?: return
-        val blockLocation = block.location.clone()
-        object : BukkitRunnable() {
-            override fun run() {
-                spawnTreasureChest(player, blockLocation.block, rarity)
-            }
-        }.runTaskLater(plugin, 1L)
-
-        playerCooldowns[player.uniqueId] = System.currentTimeMillis()
     }
 
     private fun removeTreasure(block: Block, broken: Boolean = false) {

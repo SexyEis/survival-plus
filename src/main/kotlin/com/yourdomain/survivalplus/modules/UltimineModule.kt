@@ -25,7 +25,7 @@ import kotlin.random.Random
 class UltimineModule(private val plugin: SurvivalPlus) : Module, Listener {
 
     enum class Mode {
-        NORMAL, TUNNEL, BIG_TUNNEL, MAX_BREAK
+        NORMAL, TUNNEL, BIG_TUNNEL
     }
 
     private val playerModes = mutableMapOf<UUID, Mode>()
@@ -70,9 +70,21 @@ class UltimineModule(private val plugin: SurvivalPlus) : Module, Listener {
     fun onPlayerInteract(event: PlayerInteractEvent) {
         val player = event.player
         if (player.isSneaking && (event.action == Action.RIGHT_CLICK_AIR || event.action == Action.RIGHT_CLICK_BLOCK)) {
+            // Allow players to interact with blocks that have GUIs (e.g., chests, crafting tables)
+            if (event.action == Action.RIGHT_CLICK_BLOCK && event.clickedBlock?.type?.isInteractable == true) {
+                return
+            }
+
             if (player.inventory.itemInMainHand.type.isEdible || player.inventory.itemInMainHand.type == Material.SHIELD) return
+
             event.isCancelled = true
-            gui.open(player)
+            val isActive = toggleUltimineActive(player)
+            val status = if (isActive) {
+                Component.text("ON", NamedTextColor.GREEN, TextDecoration.BOLD)
+            } else {
+                Component.text("OFF", NamedTextColor.RED, TextDecoration.BOLD)
+            }
+            player.sendActionBar(Component.text("Ultimine: ").append(status))
         }
     }
 
@@ -90,13 +102,6 @@ class UltimineModule(private val plugin: SurvivalPlus) : Module, Listener {
             Mode.NORMAL -> findAdjacentBlocks(originalBlock)
             Mode.TUNNEL -> findTunnelBlocks(originalBlock, player.facing, 2, 1, item)
             Mode.BIG_TUNNEL -> findTunnelBlocks(originalBlock, player.facing, 3, 3, item)
-            Mode.MAX_BREAK -> {
-                if (Tag.ITEMS_AXES.isTagged(item.type) && Tag.LOGS.isTagged(originalBlock.type)) {
-                    findTreeLikeBlocks(player, originalBlock, item)
-                } else {
-                    findMaxBreakBlocks(player, originalBlock, item)
-                }
-            }
         }
 
         if (blocksToBreak.isEmpty()) return
@@ -117,6 +122,13 @@ class UltimineModule(private val plugin: SurvivalPlus) : Module, Listener {
             if (treasuresModule != null && treasuresModule.isTreasure(block)) {
                 continue
             }
+
+            if (treasuresModule != null && plugin.moduleManager.isModuleEnabled("treasures")) {
+                if (treasuresModule.trySpawnTreasure(player, block)) {
+                    continue // Treasure spawned, so we skip breaking this block
+                }
+            }
+
             if (!toolHasDurability(tool)) break
 
             val breakEvent = BlockBreakEvent(block, player)
@@ -177,34 +189,6 @@ class UltimineModule(private val plugin: SurvivalPlus) : Module, Listener {
         return blocks
     }
 
-    private fun findTreeLikeBlocks(player: Player, startBlock: Block, tool: ItemStack): Set<Block> {
-        val blocks = mutableSetOf<Block>()
-        val toVisit = ArrayDeque<Block>()
-        val visited = mutableSetOf<Block>()
-        toVisit.add(startBlock)
-        visited.add(startBlock)
-
-        while (toVisit.isNotEmpty() && blocks.size < maxBlocks) {
-            val current = toVisit.removeFirst()
-            if (Tag.LOGS.isTagged(current.type)) {
-                blocks.add(current)
-
-                for (x in -1..1) {
-                    for (y in -1..1) {
-                        for (z in -1..1) {
-                            if (x == 0 && y == 0 && z == 0) continue
-                            val neighbor = current.getRelative(x, y, z)
-                            if (visited.add(neighbor)) {
-                                toVisit.add(neighbor)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        return blocks
-    }
-
     private fun findTunnelBlocks(startBlock: Block, direction: BlockFace, width: Int, height: Int, tool: ItemStack): Set<Block> {
         val blocks = mutableSetOf<Block>()
         val length = maxBlocks / (width * height)
@@ -229,34 +213,6 @@ class UltimineModule(private val plugin: SurvivalPlus) : Module, Listener {
             }
         }
 
-        return blocks
-    }
-
-    private fun findMaxBreakBlocks(player: Player, startBlock: Block, tool: ItemStack): Set<Block> {
-        val blocks = mutableSetOf<Block>()
-        val toVisit = ArrayDeque<Block>()
-        val visited = mutableSetOf<Block>()
-        toVisit.add(startBlock)
-        visited.add(startBlock)
-
-        while (toVisit.isNotEmpty() && blocks.size < maxBlocks) {
-            val current = toVisit.removeFirst()
-            if (canToolBreak(tool, current)) {
-                blocks.add(current)
-
-                for (x in -1..1) {
-                    for (y in -1..1) {
-                        for (z in -1..1) {
-                            if (x == 0 && y == 0 && z == 0) continue
-                            val neighbor = current.getRelative(x, y, z)
-                            if (visited.add(neighbor)) {
-                                toVisit.add(neighbor)
-                            }
-                        }
-                    }
-                }
-            }
-        }
         return blocks
     }
 
