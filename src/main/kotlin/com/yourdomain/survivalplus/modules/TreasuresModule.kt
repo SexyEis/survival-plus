@@ -39,7 +39,7 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
     }
 
     private fun loadConfig() {
-        val config = plugin.configManager.getModuleConfig(name.lowercase()) ?: return
+        val config = plugin.configManager.getModuleConfig(getName().lowercase()) ?: return
         spawnChance = config.getDouble("global-settings.spawn-chance", 0.001)
         findCooldown = config.getLong("global-settings.find-cooldown", 60)
 
@@ -156,7 +156,7 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
         val inventory = chest.inventory
         val biome = block.biome.key().key()
 
-        val config = plugin.configManager.getModuleConfig(name.lowercase()) ?: return
+        val config = plugin.configManager.getModuleConfig(getName().lowercase()) ?: return
         val lootConfigSection = config.getConfigurationSection("loot-tables") ?: return
 
         val lootList = lootConfigSection.getStringList("$biome.$rarity")

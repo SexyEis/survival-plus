@@ -45,7 +45,7 @@ class UltimineModule(private val plugin: SurvivalPlus) : Module, Listener {
     }
 
     private fun loadConfig() {
-        plugin.configManager.getModuleConfig(name.lowercase())?.let {
+        plugin.configManager.getModuleConfig(getName().lowercase())?.let {
             maxBlocks = it.getInt("max-blocks", 64)
         }
     }

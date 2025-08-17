@@ -27,7 +27,7 @@ class VeinMinerModule(private val plugin: SurvivalPlus) : Module, Listener {
     }
 
     private fun loadConfig() {
-        plugin.configManager.getModuleConfig(name.lowercase())?.let { config ->
+        plugin.configManager.getModuleConfig(getName().lowercase())?.let { config ->
             maxBlocks = config.getInt("max-blocks", 64)
             mineableOres.clear()
             val oreNames = config.getStringList("mineable-ores")

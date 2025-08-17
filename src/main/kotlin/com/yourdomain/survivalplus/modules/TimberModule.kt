@@ -32,7 +32,7 @@ class TimberModule(private val plugin: SurvivalPlus) : Module, Listener {
     }
 
     private fun loadConfig() {
-        plugin.configManager.getModuleConfig(name.lowercase())?.let { config ->
+        plugin.configManager.getModuleConfig(getName().lowercase())?.let { config ->
             maxLogs = config.getInt("max-logs", 256)
             leafSearchRadius = config.getInt("leaf-search-radius", 6)
             logTypes.clear()

@@ -1,0 +1,50 @@
+# Treasures Module Settings
+
+global-settings:
+  # Chance to find a treasure chest when mining any block (e.g., 0.001 for 0.1%).
+  spawn-chance: 0.001
+  # Cooldown in seconds before a player can find another chest.
+  find-cooldown: 60
+
+# The chance for each rarity to be chosen. The values should ideally add up to 1.0.
+rarity-chances:
+  normal: 0.50
+  rare: 0.25
+  epic: 0.15
+  legendary: 0.08
+  mythic: 0.02
+
+# Loot tables for the treasures.
+# You can define loot for any biome. If a biome is not specified, 'default' will be used.
+# Format: 'MATERIAL_NAME QUANTITY_RANGE {NBT_DATA}'
+# Example: 'DIAMOND_SWORD 1 {Enchantments:[{id:"sharpness",lvl:10s}]}'
+loot-tables:
+  default:
+    normal:
+      - "COAL 8-16"
+      - "RAW_IRON 4-8"
+      - "WHEAT 10-20"
+    rare:
+      - "IRON_INGOT 5-10"
+      - "GOLD_INGOT 3-6"
+      - "LAPIS_LAZULI 10-30"
+    epic:
+      - "DIAMOND 2-4"
+      - "EMERALD 2-4"
+      - "GOLDEN_APPLE 1"
+    legendary:
+      - "DIAMOND_BLOCK 1-2"
+      - "ENCHANTED_GOLDEN_APPLE 1"
+      - "BOOK 1 {StoredEnchantments:[{id:\"mending\",lvl:1s}]}"
+    mythic:
+      - "NETHERITE_INGOT 1"
+      - "DIAMOND_SWORD 1 {display:{Name:'{\"text\":\"Mythic Blade\",\"color\":\"light_purple\"}'},Enchantments:[{id:\"sharpness\",lvl:7s},{id:\"unbreaking\",lvl:4s}]}"
+      - "ELYTRA 1 {Enchantments:[{id:\"unbreaking\",lvl:5s}]}"
+  plains:
+    normal:
+      - "WHEAT_SEEDS 10-20"
+      - "PUMPKIN_SEEDS 5-10"
+      - "LEATHER 2-5"
+    rare:
+      - "SADDLE 1"
+      - "IRON_HORSE_ARMOR 1"
