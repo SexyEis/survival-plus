@@ -30,6 +30,7 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
     private val playerCooldowns = mutableMapOf<UUID, Long>()
     private var spawnChance = 0.001
     private var findCooldown = 60L // in seconds
+    private var despawnTimer = 60L // in seconds
     private lateinit var rarityChances: Map<String, Double>
 
     init {
@@ -40,6 +41,7 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
         val config = plugin.configManager.getModuleConfig(getName().lowercase()) ?: return
         spawnChance = config.getDouble("global-settings.spawn-chance", 0.001)
         findCooldown = config.getLong("global-settings.find-cooldown", 60)
+        despawnTimer = config.getLong("global-settings.despawn-timer", 60)
 
         val chancesSection = config.getConfigurationSection("rarity-chances")
         rarityChances = if (chancesSection != null) {
@@ -87,21 +89,25 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
         return true
     }
 
+    private fun dropChestItems(block: Block) {
+        val chest = block.state as? Chest
+        if (chest != null) {
+            chest.inventory.contents.forEach { item ->
+                if (item != null) {
+                    block.world.dropItemNaturally(block.location, item)
+                }
+            }
+            chest.inventory.clear()
+        }
+    }
+
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     fun onBlockBreak(event: BlockBreakEvent) {
         val player = event.player
         val block = event.block
 
         if (block.type == Material.CHEST && activeTreasures.containsKey(block)) {
-            val chest = block.state as? Chest
-            if (chest != null) {
-                chest.inventory.contents.forEach { item ->
-                    if (item != null) {
-                        block.world.dropItemNaturally(block.location, item)
-                    }
-                }
-                chest.inventory.clear()
-            }
+            dropChestItems(block)
             removeTreasure(block, true)
             event.isDropItems = false
             return
@@ -157,10 +163,11 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
             object : BukkitRunnable() {
                 override fun run() {
                     if (activeTreasures.containsKey(block)) {
+                        dropChestItems(block)
                         removeTreasure(block)
                     }
                 }
-            }.runTaskLater(plugin, 20L * 60 * 5) // 5 minutes
+            }.runTaskLater(plugin, 20L * despawnTimer)
 
         } else {
             block.type = originalType

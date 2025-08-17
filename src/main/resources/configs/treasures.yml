@@ -5,6 +5,8 @@ global-settings:
   spawn-chance: 0.001
   # Cooldown in seconds before a player can find another chest.
   find-cooldown: 60
+  # Time in seconds before a treasure chest despawns and drops its items.
+  despawn-timer: 60
 
 # The chance for each rarity to be chosen. The values should ideally add up to 1.0.
 rarity-chances:

@@ -70,27 +70,20 @@ class UltimineModule(private val plugin: SurvivalPlus) : Module, Listener {
     fun onPlayerInteract(event: PlayerInteractEvent) {
         val player = event.player
         if (player.isSneaking && (event.action == Action.RIGHT_CLICK_AIR || event.action == Action.RIGHT_CLICK_BLOCK)) {
-            // Allow players to interact with blocks that have GUIs (e.g., chests, crafting tables)
-            if (event.action == Action.RIGHT_CLICK_BLOCK && event.clickedBlock?.type?.isInteractable == true) {
-                return
-            }
-
             if (player.inventory.itemInMainHand.type.isEdible || player.inventory.itemInMainHand.type == Material.SHIELD) return
-
             event.isCancelled = true
-            val isActive = toggleUltimineActive(player)
-            val status = if (isActive) {
-                Component.text("ON", NamedTextColor.GREEN, TextDecoration.BOLD)
-            } else {
-                Component.text("OFF", NamedTextColor.RED, TextDecoration.BOLD)
-            }
-            player.sendActionBar(Component.text("Ultimine: ").append(status))
+            gui.open(player)
         }
     }
 
     @EventHandler(priority = EventPriority.NORMAL, ignoreCancelled = true)
     fun onBlockBreak(event: BlockBreakEvent) {
         if (processingBlocks.get().contains(event.block)) return
+
+        val treasuresModule = plugin.moduleManager.getModule("treasures") as? TreasuresModule
+        if (treasuresModule != null && treasuresModule.isTreasure(event.block)) {
+            return // Let TreasuresModule handle its own chests
+        }
 
         val player = event.player
         val originalBlock = event.block
