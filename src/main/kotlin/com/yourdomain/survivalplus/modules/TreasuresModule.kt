@@ -24,14 +24,21 @@ import kotlin.random.Random
 
 class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
 
-    private data class Treasure(val hologram: ArmorStand, val particleTask: BukkitTask)
+    private data class Treasure(
+        val nameHologram: ArmorStand,
+        val timerHologram: ArmorStand,
+        val particleTask: BukkitTask,
+        val despawnTime: Long
+    )
     private val activeTreasures = mutableMapOf<Block, Treasure>()
 
     private val playerCooldowns = mutableMapOf<UUID, Long>()
     private var spawnChance = 0.001
     private var findCooldown = 60L // in seconds
     private var despawnTimer = 60L // in seconds
+    private var broadcastSound = false
     private lateinit var rarityChances: Map<String, Double>
+    private lateinit var messageSettings: Map<String, String>
 
     init {
         loadConfig()
@@ -42,12 +49,20 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
         spawnChance = config.getDouble("global-settings.spawn-chance", 0.001)
         findCooldown = config.getLong("global-settings.find-cooldown", 60)
         despawnTimer = config.getLong("global-settings.despawn-timer", 60)
+        broadcastSound = config.getBoolean("global-settings.broadcast-sound", false)
 
         val chancesSection = config.getConfigurationSection("rarity-chances")
         rarityChances = if (chancesSection != null) {
             chancesSection.getKeys(false).associateWith { chancesSection.getDouble(it) }
         } else {
             mapOf("normal" to 0.50, "rare" to 0.25, "epic" to 0.15, "legendary" to 0.08, "mythic" to 0.02)
+        }
+
+        val messageSection = config.getConfigurationSection("message-settings")
+        messageSettings = if (messageSection != null) {
+            messageSection.getKeys(false).associateWith { key -> messageSection.getString(key) ?: "player" }
+        } else {
+            mapOf("normal" to "player", "rare" to "player", "epic" to "server", "legendary" to "server", "mythic" to "server")
         }
     }
 
@@ -126,7 +141,8 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
 
     private fun removeTreasure(block: Block, broken: Boolean = false) {
         activeTreasures.remove(block)?.let {
-            it.hologram.remove()
+            it.nameHologram.remove()
+            it.timerHologram.remove()
             it.particleTask.cancel()
             if (!broken) {
                 block.type = Material.AIR
@@ -153,11 +169,13 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
         if (originalType.isAir) return
         block.type = Material.CHEST
 
-        val hologram = spawnHologram(block, rarity)
-        val particleTask = startParticleEffect(block, rarity)
+        val holograms = spawnHolograms(block, rarity)
+        val particleTask = startParticleEffect(player, block, rarity)
 
-        if (hologram != null) {
-            activeTreasures[block] = Treasure(hologram, particleTask)
+        if (holograms != null) {
+            val (nameHologram, timerHologram) = holograms
+            val despawnTimeMillis = System.currentTimeMillis() + despawnTimer * 1000
+            activeTreasures[block] = Treasure(nameHologram, timerHologram, particleTask, despawnTimeMillis)
             populateChest(block, rarity)
 
             object : BukkitRunnable() {
@@ -175,6 +193,32 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
         }
 
         plugin.logger.info("A '$rarity' treasure chest spawned for ${player.name}!")
+        sendMessage(player, rarity)
+    }
+
+    private fun sendMessage(player: Player, rarity: String) {
+        val messageMode = messageSettings[rarity.lowercase()] ?: "player"
+        if (messageMode == "none") return
+
+        val (rarityText, color) = when (rarity.lowercase()) {
+            "normal" -> "a Normal" to NamedTextColor.WHITE
+            "rare" -> "a Rare" to NamedTextColor.BLUE
+            "epic" -> "an Epic" to NamedTextColor.DARK_PURPLE
+            "legendary" -> "a Legendary" to NamedTextColor.GOLD
+            "mythic" -> "a Mythic" to NamedTextColor.LIGHT_PURPLE
+            else -> "a" to NamedTextColor.GRAY
+        }
+
+        val message = Component.text(player.name, NamedTextColor.YELLOW)
+            .append(Component.text(" has found ", NamedTextColor.GRAY))
+            .append(Component.text(rarityText, color))
+            .append(Component.text(" treasure chest!", NamedTextColor.GRAY))
+
+        if (messageMode == "server") {
+            plugin.server.broadcast(message)
+        } else {
+            player.sendMessage(message)
+        }
     }
 
     private data class PotionEffectRule(val type: PotionEffectType, val amplifier: Int, val duration: Int)
@@ -304,9 +348,10 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
         }
     }
 
-    private fun spawnHologram(block: Block, rarity: String): ArmorStand? {
-        val location = block.location.add(0.5, 1.0, 0.5)
-        val world = location.world ?: return null
+    private fun spawnHolograms(block: Block, rarity: String): Pair<ArmorStand, ArmorStand>? {
+        val nameLocation = block.location.add(0.5, 1.2, 0.5)
+        val timerLocation = block.location.add(0.5, 0.9, 0.5)
+        val world = nameLocation.world ?: return null
 
         val (text, color) = when (rarity.lowercase()) {
             "normal" -> "Normal Treasure" to NamedTextColor.WHITE
@@ -317,7 +362,7 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
             else -> "Treasure" to NamedTextColor.GRAY
         }
 
-        return world.spawn(location, ArmorStand::class.java) {
+        val nameHologram = world.spawn(nameLocation, ArmorStand::class.java) {
             it.isMarker = true
             it.isVisible = false
             it.setGravity(false)
@@ -325,29 +370,59 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
             it.customName(Component.text(text).color(color).decorate(TextDecoration.BOLD))
             it.isCustomNameVisible = true
         }
+
+        val timerHologram = world.spawn(timerLocation, ArmorStand::class.java) {
+            it.isMarker = true
+            it.isVisible = false
+            it.setGravity(false)
+            it.isSmall = true
+            it.customName(Component.text("Despawns in...").color(NamedTextColor.GRAY))
+            it.isCustomNameVisible = true
+        }
+
+        return nameHologram to timerHologram
     }
 
-    private fun startParticleEffect(block: Block, rarity: String): BukkitTask {
+    private fun startParticleEffect(player: Player, block: Block, rarity: String): BukkitTask {
         val location = block.location.add(0.5, 0.5, 0.5)
         val world = location.world!!
 
         val (sound, pitch) = when (rarity.lowercase()) {
-            "rare" -> Sound.ENTITY_PLAYER_LEVELUP to 0.7f
-            "epic" -> Sound.ENTITY_PLAYER_LEVELUP to 0.9f
+            "rare" -> Sound.BLOCK_ENCHANTMENT_TABLE_USE to 1.0f
+            "epic" -> Sound.ENTITY_PLAYER_LEVELUP to 1.2f
             "legendary" -> Sound.UI_TOAST_CHALLENGE_COMPLETE to 1.0f
-            "mythic" -> Sound.ENTITY_ENDER_DRAGON_GROWL to 0.8f
-            else -> Sound.ENTITY_ITEM_PICKUP to 1.0f
+            "mythic" -> Sound.ENTITY_ENDER_DRAGON_DEATH to 0.8f
+            else -> Sound.BLOCK_CHEST_OPEN to 1.0f
         }
-        world.playSound(location, sound, 1.0f, pitch)
+
+        if (broadcastSound) {
+            world.playSound(location, sound, 1.0f, pitch)
+        } else {
+            player.playSound(location, sound, 1.0f, pitch)
+        }
 
         val animationType = Random.nextInt(3)
 
         return object : BukkitRunnable() {
             var tick = 0L
             override fun run() {
-                if (!activeTreasures.containsKey(block)) {
+                val treasure = activeTreasures[block]
+                if (treasure == null) {
                     this.cancel()
                     return
+                }
+
+                if (tick % 20 == 0L) {
+                    val remainingSeconds = (treasure.despawnTime - System.currentTimeMillis()) / 1000
+                    if (remainingSeconds > 0) {
+                        treasure.timerHologram.customName(
+                            Component.text("Despawns in: ", NamedTextColor.GRAY)
+                                .append(Component.text(remainingSeconds, NamedTextColor.WHITE))
+                                .append(Component.text("s", NamedTextColor.GRAY))
+                        )
+                    } else {
+                        treasure.timerHologram.customName(Component.text("Despawning...", NamedTextColor.RED))
+                    }
                 }
 
                 val angle_fast = tick * 5 * (Math.PI / 180)
@@ -355,127 +430,66 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
 
                 when (rarity.lowercase()) {
                     "normal" -> {
-                        when(animationType) {
-                            0 -> { // Simple Sparkle
-                                if (tick % 10 == 0L) {
-                                    world.spawnParticle(Particle.HAPPY_VILLAGER, location, 5, 0.5, 0.5, 0.5, 0.0)
-                                }
-                            }
-                            1 -> { // Gentle Swirl
-                                val x = location.x + 0.8 * Math.cos(angle_slow * 5)
-                                val z = location.z + 0.8 * Math.sin(angle_slow * 5)
-                                world.spawnParticle(Particle.CRIT, x, location.y + 0.5, z, 1, 0.0, 0.0, 0.0, 0.0)
-                            }
-                            2 -> { // Popping bubbles
-                                if (tick % 15 == 0L) {
-                                    world.spawnParticle(Particle.BUBBLE_POP, location, 3, 0.4, 0.4, 0.4, 0.1)
-                                }
-                            }
+                        if (tick % 8 == 0L) {
+                            world.spawnParticle(Particle.CRIT, location, 20, 0.6, 0.6, 0.6, 0.1)
+                            world.spawnParticle(Particle.HAPPY_VILLAGER, location, 10, 0.6, 0.6, 0.6, 0.1)
                         }
                     }
                     "rare" -> {
-                        when(animationType) {
-                            0 -> { // Blue Orbit
-                                val x = location.x + 1.2 * Math.cos(angle_fast)
-                                val z = location.z + 1.2 * Math.sin(angle_fast)
-                                Particle.DustOptions(Color.BLUE, 1.2f).let {
-                                    world.spawnParticle(Particle.DUST, x, location.y + 0.8, z, 1, it)
-                                }
-                            }
-                            1 -> { // End Rod Pulses
-                                if (tick % 20 == 0L) {
-                                    world.spawnParticle(Particle.END_ROD, location, 10, 0.1, 0.5, 0.1, 0.05)
-                                }
-                            }
-                            2 -> { // Rising Notes
-                                if (tick % 8 == 0L) {
-                                    val x = location.x + (Random.nextDouble() - 0.5) * 1.5
-                                    val z = location.z + (Random.nextDouble() - 0.5) * 1.5
-                                    world.spawnParticle(Particle.NOTE, x, location.y + 1, z, 1)
-                                }
-                            }
+                        val x = location.x + 1.5 * Math.cos(angle_fast * 1.5)
+                        val z = location.z + 1.5 * Math.sin(angle_fast * 1.5)
+                        Particle.DustOptions(Color.AQUA, 1.5f).let {
+                            world.spawnParticle(Particle.DUST, x, location.y + 0.8, z, 2, it)
+                        }
+                        if (tick % 10 == 0L) {
+                            world.spawnParticle(Particle.END_ROD, location, 15, 0.2, 0.6, 0.2, 0.1)
                         }
                     }
                     "epic" -> {
-                        when(animationType) {
-                            0 -> { // Purple Helix
-                                val x1 = location.x + 1.0 * Math.cos(angle_fast * 2)
-                                val z1 = location.z + 1.0 * Math.sin(angle_fast * 2)
-                                val y1 = location.y + (tick % 40) * 0.05
-                                Particle.DustOptions(Color.PURPLE, 1.5f).let {
-                                    world.spawnParticle(Particle.DUST, Location(world, x1, y1, z1), 1, it)
-                                }
-                                val x2 = location.x + 1.0 * Math.cos(angle_fast * 2 + Math.PI)
-                                val z2 = location.z + 1.0 * Math.sin(angle_fast * 2 + Math.PI)
-                                Particle.DustOptions(Color.FUCHSIA, 1.5f).let {
-                                    world.spawnParticle(Particle.DUST, Location(world, x2, y1, z2), 1, it)
-                                }
-                            }
-                            1 -> { // Enchanting Glyphs
-                                val x = location.x + (Random.nextDouble() - 0.5) * 2.0
-                                val y = location.y + (Random.nextDouble() - 0.5) * 2.0
-                                val z = location.z + (Random.nextDouble() - 0.5) * 2.0
-                                if (tick % 4 == 0L) {
-                                    world.spawnParticle(Particle.ENCHANT, Location(world, x, y, z), 1)
-                                }
-                            }
-                            2 -> { // Witch Sparks
-                                val x = location.x + Math.cos(angle_fast * 3) * (1.5 - (tick % 50) / 50.0)
-                                val z = location.z + Math.sin(angle_fast * 3) * (1.5 - (tick % 50) / 50.0)
-                                val y = location.y + (tick % 50) * 0.04
-                                world.spawnParticle(Particle.WITCH, x, y, z, 1, 0.0, 0.0, 0.0, 0.0)
-                            }
+                        val x1 = location.x + 1.2 * Math.cos(angle_fast * 2.5)
+                        val z1 = location.z + 1.2 * Math.sin(angle_fast * 2.5)
+                        val y1 = location.y + (tick % 40) * 0.06
+                        Particle.DustOptions(Color.PURPLE, 2.0f).let {
+                            world.spawnParticle(Particle.DUST, Location(world, x1, y1, z1), 2, it)
+                        }
+                        val x2 = location.x + 1.2 * Math.cos(angle_fast * 2.5 + Math.PI)
+                        val z2 = location.z + 1.2 * Math.sin(angle_fast * 2.5 + Math.PI)
+                        Particle.DustOptions(Color.FUCHSIA, 2.0f).let {
+                            world.spawnParticle(Particle.DUST, Location(world, x2, y1, z2), 2, it)
+                        }
+                        if (tick % 5 == 0L) {
+                            world.spawnParticle(Particle.ENCHANT, location, 5, 1.0, 1.0, 1.0, 0.1)
                         }
                     }
                     "legendary" -> {
-                        when(animationType) {
-                            0 -> { // Golden Beacon
-                                for(i in 0..4) {
-                                    val y = location.y + i*0.5 + (tick % 10)*0.05
-                                    world.spawnParticle(Particle.FLAME, location.x, y, location.z, 2, 0.1, 0.1, 0.1, 0.0)
-                                }
-                                Particle.DustOptions(Color.ORANGE, 2.0f).let {
-                                    world.spawnParticle(Particle.DUST, location, 10, 0.5, 0.5, 0.5, it)
-                                }
-                            }
-                            1 -> { // Lava Drips with Smoke
-                                if (tick % 10 == 0L) {
-                                    world.spawnParticle(Particle.LAVA, location.clone().add(0.0, 1.5, 0.0), 1)
-                                }
-                                world.spawnParticle(Particle.LARGE_SMOKE, location, 1, 0.3, 0.3, 0.3, 0.0)
-                            }
-                            2 -> { // Fiery Crown
-                                for (i in 0..5) {
-                                    val angle_slice = (2 * Math.PI / 6) * i
-                                    val x = location.x + 1.3 * Math.cos(angle_fast + angle_slice)
-                                    val z = location.z + 1.3 * Math.sin(angle_fast + angle_slice)
-                                    world.spawnParticle(Particle.FLAME, x, location.y + 1.5, z, 1, 0.0, 0.0, 0.0, 0.0)
-                                }
+                        for (i in 0..6) {
+                            val angle_slice = (2 * Math.PI / 7) * i
+                            val x = location.x + 1.8 * Math.cos(angle_fast * -1.5 + angle_slice)
+                            val z = location.z + 1.8 * Math.sin(angle_fast * -1.5 + angle_slice)
+                            world.spawnParticle(Particle.FLAME, x, location.y + 1.0, z, 1, 0.0, 0.0, 0.0, 0.0)
+                        }
+                        if (tick % 4 == 0L) {
+                            Particle.DustOptions(Color.ORANGE, 2.5f).let {
+                                world.spawnParticle(Particle.DUST, location, 15, 0.6, 0.6, 0.6, it)
                             }
                         }
                     }
                     "mythic" -> {
-                        when(animationType) {
-                            0 -> { // Ender Dragon Breath Ring
-                                val radius = 1.8
-                                val x = location.x + radius * Math.cos(angle_fast * -2)
-                                val z = location.z + radius * Math.sin(angle_fast * -2)
-                                world.spawnParticle(Particle.DRAGON_BREATH, x, location.y + 0.2, z, 3, 0.1, 0.1, 0.1, 0.0)
-                                if (tick % 40 == 0L) world.playSound(location, Sound.ENTITY_ENDER_DRAGON_FLAP, 0.5f, 1.2f)
-                            }
-                            1 -> { // Totem of Undying effect
-                                if (tick % 60 == 0L) {
-                                    world.spawnParticle(Particle.TOTEM_OF_UNDYING, location, 30, 0.5, 1.0, 0.5, 0.2)
-                                    world.playSound(location, Sound.ITEM_TOTEM_USE, 0.8f, 1.0f)
-                                }
-                            }
-                            2 -> { // Soul Vortex
-                                val x = location.x + 0.5 * Math.cos(angle_fast * 4) * (1 - (tick % 100)/100.0)
-                                val z = location.z + 0.5 * Math.sin(angle_fast * 4) * (1 - (tick % 100)/100.0)
-                                val y = location.y + (tick % 100) * 0.02
-                                world.spawnParticle(Particle.SOUL, x, y, z, 1, 0.0, 0.0, 0.0, 0.0)
-                            }
+                        // Totem effect
+                        if (tick % 40 == 0L) {
+                            world.spawnParticle(Particle.TOTEM_OF_UNDYING, location, 50, 0.8, 1.2, 0.8, 0.3)
+                            world.playSound(location, Sound.ITEM_TOTEM_USE, 1.0f, 1.2f)
                         }
+                        // Dragon breath ring
+                        val radius = 2.0
+                        val x = location.x + radius * Math.cos(angle_fast * -2.5)
+                        val z = location.z + radius * Math.sin(angle_fast * -2.5)
+                        world.spawnParticle(Particle.DRAGON_BREATH, x, location.y + 0.2, z, 5, 0.2, 0.2, 0.2, 0.1)
+                        // Soul vortex
+                        val x_vortex = location.x + 0.8 * Math.cos(angle_fast * 5) * (1 - (tick % 80)/80.0)
+                        val z_vortex = location.z + 0.8 * Math.sin(angle_fast * 5) * (1 - (tick % 80)/80.0)
+                        val y_vortex = location.y + (tick % 80) * 0.03
+                        world.spawnParticle(Particle.SOUL, x_vortex, y_vortex, z_vortex, 2, 0.0, 0.0, 0.0, 0.0)
                     }
                 }
                 tick++

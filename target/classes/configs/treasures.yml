@@ -7,6 +7,17 @@ global-settings:
   find-cooldown: 60
   # Time in seconds before a treasure chest despawns and drops its items.
   despawn-timer: 60
+  # Whether to broadcast treasure sounds to the entire server. If false, only the finder will hear it.
+  broadcast-sound: false
+
+# Message settings for when a treasure is found.
+# Options for each rarity: "none", "player" (only to the finder), "server" (to everyone).
+message-settings:
+  normal: "player"
+  rare: "player"
+  epic: "server"
+  legendary: "server"
+  mythic: "server"
 
 # The chance for each rarity to be chosen. The values should ideally add up to 1.0.
 rarity-chances:
