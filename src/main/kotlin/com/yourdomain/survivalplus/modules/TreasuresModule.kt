@@ -22,6 +22,7 @@ import org.bukkit.inventory.meta.SkullMeta
 import org.bukkit.potion.PotionEffect
 import org.bukkit.potion.PotionEffectType
 import org.bukkit.scheduler.BukkitRunnable
+import org.bukkit.scheduler.BukkitTask
 import org.bukkit.util.Transformation
 import org.joml.AxisAngle4f
 import org.joml.Vector3f
@@ -37,7 +38,8 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
         val timerHologram: ArmorStand,
         val despawnTime: Long,
         val loot: List<ItemStack>,
-        val rarity: String
+        val rarity: String,
+        var timerTask: BukkitTask? = null
     )
     private val activeTreasures = mutableMapOf<Location, Treasure>()
     private val openingTreasures = mutableSetOf<Location>()
@@ -269,6 +271,7 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
 
     private fun removeTreasure(location: Location, itemsToDrop: List<ItemStack>) {
         activeTreasures.remove(location)?.let {
+            it.timerTask?.cancel()
             it.itemDisplay.remove()
             it.interaction.remove()
             it.nameHologram.remove()
@@ -311,7 +314,7 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
 
         playPortalAnimation(location) {
             val headStack = createCustomHead(CHEST_TEXTURE)
-            val itemDisplay = world.spawn(location.clone().add(0.5, 0.25, 0.5), ItemDisplay::class.java) {
+            val itemDisplay = world.spawn(location.clone().add(0.5, 0.5, 0.5), ItemDisplay::class.java) {
                 it.itemStack = headStack
                 it.billboard = Billboard.FIXED
                 it.transformation = Transformation(
@@ -323,8 +326,8 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
             }
 
             val interaction = world.spawn(itemDisplay.location, Interaction::class.java) {
-                it.interactionHeight = 0.6f
-                it.interactionWidth = 0.6f
+                it.interactionHeight = 1.0f
+                it.interactionWidth = 1.0f
             }
 
             val holograms = spawnHolograms(location, rarity)
@@ -335,6 +338,19 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
                 val despawnTimeMillis = System.currentTimeMillis() + despawnTimer * 1000
                 val treasure = Treasure(itemDisplay, interaction, nameHologram, timerHologram, despawnTimeMillis, loot, rarity)
                 activeTreasures[location] = treasure
+
+                treasure.timerTask = object : BukkitRunnable() {
+                    override fun run() {
+                        val remaining = (treasure.despawnTime - System.currentTimeMillis()) / 1000
+                        if (remaining <= 0) {
+                            this.cancel()
+                            return
+                        }
+                        treasure.timerHologram.customName(
+                            Component.text("Despawns in ${remaining}s").color(NamedTextColor.GRAY)
+                        )
+                    }
+                }.runTaskTimer(plugin, 0L, 20L)
 
                 location.world.playSound(location, Sound.BLOCK_CHEST_LOCKED, 1.0f, 1.0f)
 
@@ -355,14 +371,14 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
                             itemDisplay.transformation = Transformation(
                                 Vector3f(0f, 0f, 0f),
                                 AxisAngle4f(),
-                                Vector3f(0.6f, 0.6f, 0.6f),
+                                Vector3f(1.0f, 1.0f, 1.0f),
                                 AxisAngle4f()
                             )
                             this.cancel()
                             return
                         }
                         val progress = ticks.toDouble() / duration
-                        val scale = (0.6 * progress).toFloat()
+                        val scale = (1.0 * progress).toFloat()
 
                         // Double bounce
                         val yOffset = (Math.abs(Math.sin(progress * Math.PI * 2)) * (1 - progress) * 0.7).toFloat()
