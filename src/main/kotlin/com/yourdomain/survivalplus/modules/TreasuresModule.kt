@@ -21,7 +21,6 @@ import org.bukkit.inventory.meta.SkullMeta
 import org.bukkit.potion.PotionEffect
 import org.bukkit.potion.PotionEffectType
 import org.bukkit.scheduler.BukkitRunnable
-import org.bukkit.scheduler.BukkitTask
 import org.bukkit.util.Transformation
 import org.joml.AxisAngle4f
 import org.joml.Vector3f
@@ -40,6 +39,7 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
         val rarity: String
     )
     private val activeTreasures = mutableMapOf<Location, Treasure>()
+
     private val playerCooldowns = mutableMapOf<UUID, Long>()
     private var spawnChance = 0.001
     private var findCooldown = 60L
@@ -48,6 +48,8 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
     private lateinit var rarityChances: Map<String, Double>
     private lateinit var messageSettings: Map<String, String>
     private lateinit var rarityHeadTextures: Map<String, String>
+
+    private val CHEST_TEXTURE = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvOWM5NmJlNzg4NmViN2RmNzU1MjVhMzYzZTVmNTQ5NjI2YzIxMzg4ZjBmZGE5ODhhNmU4YmY0ODdhNTMifX19"
 
     init {
         loadConfig()
@@ -136,7 +138,7 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
         // Open animation and loot drop
         object : BukkitRunnable() {
             var ticks = 0
-            val duration = 10 // ticks for shake animation
+            val duration = 10 // ticks for jump animation
             override fun run() {
                 if (ticks > duration) {
                     removeTreasure(treasureLocation, treasure.loot)
@@ -146,13 +148,13 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
                 }
 
                 val progress = ticks.toDouble() / duration
-                val angle = (Math.sin(progress * Math.PI * 2) * 10).toFloat() // Shake effect
+                val yOffset = (Math.sin(progress * Math.PI) * 0.2).toFloat() // Small jump
 
                 treasure.itemDisplay.transformation = Transformation(
-                    treasure.itemDisplay.transformation.translation,
-                    AxisAngle4f(angle, 0f, 1f, 0f), // Rotate around Y axis
+                    Vector3f(0f, yOffset, 0f),
+                    treasure.itemDisplay.transformation.leftRotation,
                     treasure.itemDisplay.transformation.scale,
-                    AxisAngle4f(0f, 0f, 0f, 1f)
+                    treasure.itemDisplay.transformation.rightRotation
                 )
                 ticks++
             }
@@ -184,8 +186,6 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
         return rarityChances.keys.lastOrNull()
     }
 
-    private val CHEST_TEXTURE = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvOWM5NmJlNzg4NmViN2RmNzU1MjVhMzYzZTVmNTQ5NjI2YzIxMzg4ZjBmZGE5ODhhNmU4YmY0ODdhNTMifX19"
-
     private fun createCustomHead(texture: String): ItemStack {
         val head = ItemStack(Material.PLAYER_HEAD)
         if (texture.isBlank()) return head
@@ -203,78 +203,99 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
         val world = location.world ?: return
         block.type = Material.BARRIER
 
-        val headStack = createCustomHead(CHEST_TEXTURE)
-        val itemDisplay = world.spawn(location.clone().add(0.5, 0.0, 0.5), ItemDisplay::class.java) {
-            it.itemStack = headStack
-            it.billboard = Billboard.FIXED
-            it.transformation = Transformation(
-                Vector3f(0f, 0f, 0f),
-                AxisAngle4f(0f, 0f, 0f, 1f),
-                Vector3f(0f, 0f, 0f),
-                AxisAngle4f(0f, 0f, 0f, 1f)
-            )
-        }
+        playPortalAnimation(location) {
+            val headStack = createCustomHead(CHEST_TEXTURE)
+            val itemDisplay = world.spawn(location.clone().add(0.5, 0.0, 0.5), ItemDisplay::class.java) {
+                it.itemStack = headStack
+                it.billboard = Billboard.FIXED
+                it.transformation = Transformation(
+                    Vector3f(0f, 0f, 0f),
+                    AxisAngle4f(0f, 0f, 0f, 1f),
+                    Vector3f(0f, 0f, 0f),
+                    AxisAngle4f(0f, 0f, 0f, 1f)
+                )
+            }
 
-        val interaction = world.spawn(location.clone().add(0.5, 0.5, 0.5), Interaction::class.java) {
-            it.interactionHeight = 1f
-            it.interactionWidth = 1f
-        }
+            val interaction = world.spawn(location.clone().add(0.5, 0.5, 0.5), Interaction::class.java) {
+                it.interactionHeight = 1.2f
+                it.interactionWidth = 1.2f
+            }
 
-        val holograms = spawnHolograms(location, rarity)
-        val loot = generateLoot(rarity, block.biome.key.key)
+            val holograms = spawnHolograms(location, rarity)
+            val loot = generateLoot(rarity, block.biome.key.key)
 
-        if (holograms != null) {
-            val (nameHologram, timerHologram) = holograms
-            val despawnTimeMillis = System.currentTimeMillis() + despawnTimer * 1000
-            val treasure = Treasure(itemDisplay, interaction, nameHologram, timerHologram, despawnTimeMillis, loot, rarity)
-            activeTreasures[location] = treasure
+            if (holograms != null) {
+                val (nameHologram, timerHologram) = holograms
+                val despawnTimeMillis = System.currentTimeMillis() + despawnTimer * 1000
+                val treasure = Treasure(itemDisplay, interaction, nameHologram, timerHologram, despawnTimeMillis, loot, rarity)
+                activeTreasures[location] = treasure
 
-            location.world.playSound(location, Sound.BLOCK_CHEST_LOCKED, 1.0f, 1.0f)
+                location.world.playSound(location, Sound.BLOCK_CHEST_LOCKED, 1.0f, 1.0f)
 
-            object : BukkitRunnable() {
-                var ticks = 0
-                val duration = 20 // ticks
-                override fun run() {
-                    if (ticks > duration) {
-                        this.cancel()
-                        return
+                object : BukkitRunnable() {
+                    var ticks = 0
+                    val duration = 30 // ticks for jump and roll
+                    override fun run() {
+                        if (ticks > duration) {
+                            this.cancel()
+                            return
+                        }
+                        val progress = ticks.toDouble() / duration
+                        val scale = (2.0 * progress).toFloat()
+                        val yOffset = (Math.sin(progress * Math.PI) * 0.5).toFloat() // Jump arc
+                        val rollAngle = (progress * 360).toFloat()
+
+                        itemDisplay.transformation = Transformation(
+                            Vector3f(0f, yOffset, 0f),
+                            AxisAngle4f(Math.toRadians(rollAngle.toDouble()).toFloat(), 1f, 0f, 0f),
+                            Vector3f(scale, scale, scale),
+                            AxisAngle4f(0f, 0f, 0f, 1f)
+                        )
+
+                        if (ticks % 4 == 0) {
+                            world.spawnParticle(Particle.FIREWORK, location.clone().add(0.5, 0.5, 0.5), 1, 0.1, 0.1, 0.1, 0.0)
+                        }
+
+                        ticks++
                     }
-                    val progress = ticks.toDouble() / duration
-                    val scale = (1.5 * progress).toFloat()
-                    val yOffset = (0.5 * progress).toFloat()
+                }.runTaskTimer(plugin, 0L, 1L)
 
-                    itemDisplay.transformation = Transformation(
-                        Vector3f(0f, yOffset, 0f),
-                        AxisAngle4f(0f, 0f, 0f, 1f),
-                        Vector3f(scale, scale, scale),
-                        AxisAngle4f(0f, 0f, 0f, 1f)
-                    )
 
-                    if (ticks % 4 == 0) {
-                        location.world.spawnParticle(Particle.ENCHANTED_HIT, location.clone().add(0.5, 0.5, 0.5), 5, 0.5, 0.5, 0.5, 0.1)
+                object : BukkitRunnable() {
+                    override fun run() {
+                        activeTreasures[location]?.let {
+                            removeTreasure(location, it.loot)
+                        }
                     }
+                }.runTaskLater(plugin, 20L * despawnTimer)
 
-                    ticks++
+            } else {
+                itemDisplay.remove()
+                interaction.remove()
+                block.type = Material.AIR
+            }
+
+            plugin.logger.info("A '$rarity' treasure spawned for ${player.name}!")
+            sendMessage(player, rarity)
+        }
+    }
+
+    private fun playPortalAnimation(location: Location, onFinish: () -> Unit) {
+        val world = location.world ?: return
+        world.playSound(location, Sound.BLOCK_PORTAL_TRAVEL, 0.5f, 1.5f)
+        object : BukkitRunnable() {
+            var ticks = 0
+            val duration = 20
+            override fun run() {
+                if (ticks > duration) {
+                    onFinish()
+                    this.cancel()
+                    return
                 }
-            }.runTaskTimer(plugin, 0L, 1L)
-
-
-            object : BukkitRunnable() {
-                override fun run() {
-                    activeTreasures[location]?.let {
-                        removeTreasure(location, it.loot)
-                    }
-                }
-            }.runTaskLater(plugin, 20L * despawnTimer)
-
-        } else {
-            itemDisplay.remove()
-            interaction.remove()
-            block.type = Material.AIR
-        }
-
-        plugin.logger.info("A '$rarity' treasure spawned for ${player.name}!")
-        sendMessage(player, rarity)
+                world.spawnParticle(Particle.REVERSE_PORTAL, location.clone().add(0.5, 0.5, 0.5), 20, 0.5, 0.5, 0.5, 0.1)
+                ticks++
+            }
+        }.runTaskTimer(plugin, 0L, 1L)
     }
 
     private fun sendMessage(player: Player, rarity: String) {
@@ -457,5 +478,4 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
 
         return nameHologram to timerHologram
     }
-
 }
