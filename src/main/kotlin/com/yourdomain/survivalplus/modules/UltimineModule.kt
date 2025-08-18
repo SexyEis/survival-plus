@@ -102,8 +102,8 @@ class UltimineModule(private val plugin: SurvivalPlus) : Module, Listener {
 
         val blocksToBreak = when (getPlayerMode(player)) {
             Mode.NORMAL -> findAdjacentBlocks(originalBlock)
-            Mode.TUNNEL -> findTunnelBlocks(originalBlock, player.facing, 2, 1, item)
-            Mode.BIG_TUNNEL -> findTunnelBlocks(originalBlock, player.facing, 3, 3, item)
+            Mode.TUNNEL -> findTunnelBlocks(originalBlock, player, 1, 2, item)
+            Mode.BIG_TUNNEL -> findTunnelBlocks(originalBlock, player, 3, 3, item)
         }
 
         if (blocksToBreak.isEmpty()) return
@@ -163,6 +163,25 @@ class UltimineModule(private val plugin: SurvivalPlus) : Module, Listener {
         }
     }
 
+    private fun getPlayerMiningDirection(player: Player): BlockFace {
+        val pitch = player.location.pitch
+        return when {
+            pitch > 45 -> BlockFace.DOWN
+            pitch < -45 -> BlockFace.UP
+            else -> player.facing
+        }
+    }
+
+    private fun BlockFace.getRightFace(): BlockFace {
+        return when (this) {
+            BlockFace.NORTH -> BlockFace.EAST
+            BlockFace.EAST -> BlockFace.SOUTH
+            BlockFace.SOUTH -> BlockFace.WEST
+            BlockFace.WEST -> BlockFace.NORTH
+            else -> this // Should not happen with cardinal faces
+        }
+    }
+
     private fun findAdjacentBlocks(startBlock: Block): Set<Block> {
         val toVisit = ArrayDeque<Block>()
         val visited = mutableSetOf<Block>()
@@ -191,18 +210,25 @@ class UltimineModule(private val plugin: SurvivalPlus) : Module, Listener {
         return blocks
     }
 
-    private fun findTunnelBlocks(startBlock: Block, direction: BlockFace, width: Int, height: Int, tool: ItemStack): Set<Block> {
+    private fun findTunnelBlocks(startBlock: Block, player: Player, width: Int, height: Int, tool: ItemStack): Set<Block> {
         val blocks = mutableSetOf<Block>()
-        val length = maxBlocks / (width * height)
+        val length = if (width * height > 0) maxBlocks / (width * height) else 0
+        if (length == 0) return emptySet()
+
+        val direction = getPlayerMiningDirection(player)
 
         val (right, up) = when (direction) {
-            BlockFace.NORTH, BlockFace.SOUTH -> BlockFace.EAST to BlockFace.UP
-            BlockFace.EAST, BlockFace.WEST -> BlockFace.SOUTH to BlockFace.UP
-            BlockFace.UP, BlockFace.DOWN -> BlockFace.EAST to (if(direction == BlockFace.UP) BlockFace.NORTH else BlockFace.SOUTH)
+            BlockFace.NORTH, BlockFace.SOUTH, BlockFace.EAST, BlockFace.WEST -> {
+                direction.getRightFace() to BlockFace.UP
+            }
+            BlockFace.UP, BlockFace.DOWN -> {
+                val horizontalFacing = player.facing.let { if (it == BlockFace.UP || it == BlockFace.DOWN) BlockFace.NORTH else it }
+                horizontalFacing.getRightFace() to horizontalFacing
+            }
             else -> return emptySet()
         }
 
-        val startCorner = startBlock.getRelative(right, -(width / 2)).getRelative(up, -(height/2))
+        val startCorner = startBlock.getRelative(right, -(width / 2)).getRelative(up, -(height / 2))
 
         for (l in 0 until length) {
             for (h in 0 until height) {
@@ -214,7 +240,6 @@ class UltimineModule(private val plugin: SurvivalPlus) : Module, Listener {
                 }
             }
         }
-
         return blocks
     }
 
