@@ -217,7 +217,7 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
             }
 
             val interaction = world.spawn(location.clone().add(0.5, 0.5, 0.5), Interaction::class.java) {
-                it.interactionHeight = 1.2f
+                it.interactionHeight = 1.0f
                 it.interactionWidth = 1.2f
             }
 
@@ -242,11 +242,11 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
                         }
                         val progress = ticks.toDouble() / duration
                         val scale = (2.0 * progress).toFloat()
-                        val yOffset = (Math.sin(progress * Math.PI) * 0.5).toFloat() // Jump arc
+                        val yOffset = (0.5 * progress) + (Math.sin(progress * Math.PI) * 0.5)
                         val rollAngle = (progress * 360).toFloat()
 
                         itemDisplay.transformation = Transformation(
-                            Vector3f(0f, yOffset, 0f),
+                            Vector3f(0f, yOffset.toFloat(), 0f),
                             AxisAngle4f(Math.toRadians(rollAngle.toDouble()).toFloat(), 1f, 0f, 0f),
                             Vector3f(scale, scale, scale),
                             AxisAngle4f(0f, 0f, 0f, 1f)
