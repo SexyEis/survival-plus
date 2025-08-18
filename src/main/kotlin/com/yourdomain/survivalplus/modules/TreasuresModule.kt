@@ -207,7 +207,7 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
         block.type = Material.BARRIER
 
         val headStack = createPlayerHead(rarity)
-        val itemDisplay = world.spawn(location.clone().add(0.5, 1.25, 0.5), ItemDisplay::class.java) {
+        val itemDisplay = world.spawn(location.clone().add(0.5, 0.5, 0.5), ItemDisplay::class.java) {
             it.itemStack = headStack
             it.billboard = Billboard.FIXED
             it.transformation = Transformation(
@@ -218,7 +218,7 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
             )
         }
 
-        val interaction = world.spawn(location.clone().add(0.5, 0.0, 0.5), Interaction::class.java) {
+        val interaction = world.spawn(location.clone().add(0.5, 0.5, 0.5), Interaction::class.java) {
             it.interactionHeight = 1f
             it.interactionWidth = 1f
         }
@@ -236,11 +236,7 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
             object : BukkitRunnable() {
                 override fun run() {
                     val currentTreasure = activeTreasures[location] ?: return
-                    if (!currentTreasure.opened) {
-                        removeTreasure(location, currentTreasure.loot)
-                    } else {
-                        removeTreasure(location, emptyList())
-                    }
+                    removeTreasure(location, currentTreasure.loot)
                 }
             }.runTaskLater(plugin, 20L * despawnTimer)
 
