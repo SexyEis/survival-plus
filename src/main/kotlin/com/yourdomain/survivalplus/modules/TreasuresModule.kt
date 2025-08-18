@@ -7,6 +7,7 @@ import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.format.TextDecoration
 import org.bukkit.*
+import org.bukkit.Particle
 import org.bukkit.block.Block
 import org.bukkit.entity.*
 import org.bukkit.entity.Display.Billboard
@@ -39,6 +40,7 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
         val rarity: String
     )
     private val activeTreasures = mutableMapOf<Location, Treasure>()
+    private val openingTreasures = mutableSetOf<Location>()
 
     private val playerCooldowns = mutableMapOf<UUID, Long>()
     private var spawnChance = 0.001
@@ -132,30 +134,134 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
         if (entity !is Interaction) return
 
         val treasureLocation = entity.location.toBlockLocation()
+        if (openingTreasures.contains(treasureLocation)) {
+            event.isCancelled = true
+            return
+        }
+
         val treasure = activeTreasures[treasureLocation] ?: return
         event.isCancelled = true
+        openingTreasures.add(treasureLocation)
 
-        // Open animation and loot drop
+        // Play a random opening animation
+        playRandomOpeningAnimation(treasure)
+    }
+
+    private fun playRandomOpeningAnimation(treasure: Treasure) {
+        when (Random.nextInt(3)) {
+            0 -> playWobbleAndPopAnimation(treasure)
+            1 -> playSpinAndRiseAnimation(treasure)
+            else -> playShakeAndBurstAnimation(treasure)
+        }
+    }
+
+    private fun onAnimationFinish(treasure: Treasure) {
+        val location = treasure.itemDisplay.location.toBlockLocation()
+        openingTreasures.remove(location)
+        location.world.playSound(location, Sound.BLOCK_CHEST_OPEN, 1.0f, 1.2f)
+        removeTreasure(location, treasure.loot)
+    }
+
+    private fun easeOutCubic(x: Double): Double = 1 - Math.pow(1 - x, 3.0)
+
+    private fun playWobbleAndPopAnimation(treasure: Treasure) {
         object : BukkitRunnable() {
             var ticks = 0
-            val duration = 10 // ticks for jump animation
+            val duration = 30
+            val itemDisplay = treasure.itemDisplay
+            val originalScale = itemDisplay.transformation.scale
+            val world = itemDisplay.world
+
             override fun run() {
                 if (ticks > duration) {
-                    removeTreasure(treasureLocation, treasure.loot)
-                    treasureLocation.world.playSound(treasureLocation, Sound.BLOCK_CHEST_OPEN, 1.0f, 1.0f)
-                    this.cancel()
+                    onAnimationFinish(treasure)
+                    cancel()
                     return
                 }
 
                 val progress = ticks.toDouble() / duration
-                val yOffset = (Math.sin(progress * Math.PI) * 0.2).toFloat() // Small jump
 
-                treasure.itemDisplay.transformation = Transformation(
+                // Wobble
+                val angle = Math.sin(progress * Math.PI * 4) * 15 * (1 - progress)
+                val yOffset = (Math.sin(progress * Math.PI) * 0.3).toFloat()
+
+                itemDisplay.transformation = Transformation(
                     Vector3f(0f, yOffset, 0f),
-                    treasure.itemDisplay.transformation.leftRotation,
-                    treasure.itemDisplay.transformation.scale,
-                    treasure.itemDisplay.transformation.rightRotation
+                    AxisAngle4f(Math.toRadians(angle).toFloat(), 0f, 1f, 0f),
+                    originalScale,
+                    AxisAngle4f()
                 )
+
+                if (ticks % 3 == 0) {
+                    world.spawnParticle(Particle.CRIT, itemDisplay.location, 3, 0.2, 0.2, 0.2, 0.0)
+                }
+                ticks++
+            }
+        }.runTaskTimer(plugin, 0L, 1L)
+    }
+
+    private fun playSpinAndRiseAnimation(treasure: Treasure) {
+        object : BukkitRunnable() {
+            var ticks = 0
+            val duration = 40
+            val itemDisplay = treasure.itemDisplay
+            val originalScale = itemDisplay.transformation.scale
+            val world = itemDisplay.world
+
+            override fun run() {
+                if (ticks > duration) {
+                    onAnimationFinish(treasure)
+                    cancel()
+                    return
+                }
+                val progress = ticks.toDouble() / duration
+                val easedProgress = easeOutCubic(progress)
+
+                val yOffset = (easedProgress * 0.5).toFloat()
+                val spinAngle = (easedProgress * 360).toFloat()
+
+                itemDisplay.transformation = Transformation(
+                    Vector3f(0f, yOffset, 0f),
+                    AxisAngle4f(Math.toRadians(spinAngle.toDouble()).toFloat(), 0f, 1f, 0f),
+                    originalScale,
+                    AxisAngle4f()
+                )
+
+                world.spawnParticle(Particle.END_ROD, itemDisplay.location.clone().add(0.0, 0.2, 0.0), 1, 0.0, 0.0, 0.0, 0.0)
+                ticks++
+            }
+        }.runTaskTimer(plugin, 0L, 1L)
+    }
+
+    private fun playShakeAndBurstAnimation(treasure: Treasure) {
+        object : BukkitRunnable() {
+            var ticks = 0
+            val duration = 35
+            val itemDisplay = treasure.itemDisplay
+            val world = itemDisplay.world
+            val originalLocation = itemDisplay.location.clone()
+
+            override fun run() {
+                if (ticks > duration) {
+                    itemDisplay.teleport(originalLocation)
+                    onAnimationFinish(treasure)
+                    cancel()
+                    return
+                }
+                val progress = ticks.toDouble() / duration
+
+                if (progress < 0.8) { // Shaking phase
+                    val xOffset = ((Random.nextDouble() - 0.5) * 0.1)
+                    val zOffset = ((Random.nextDouble() - 0.5) * 0.1)
+                    itemDisplay.teleport(originalLocation.clone().add(xOffset, 0.0, zOffset))
+                    if (ticks % 4 == 0) {
+                        world.spawnParticle(Particle.CRIT, itemDisplay.location, 5, 0.2, 0.2, 0.2, 0.0)
+                    }
+                } else if (ticks == (duration * 0.8).toInt() + 1) { // Burst phase, once
+                    itemDisplay.teleport(originalLocation) // Reset position
+                    world.spawnParticle(Particle.CRIT, itemDisplay.location, 1)
+                    world.playSound(itemDisplay.location, Sound.ENTITY_GENERIC_EXPLODE, 0.5f, 1.5f)
+                }
                 ticks++
             }
         }.runTaskTimer(plugin, 0L, 1L)
@@ -205,7 +311,7 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
 
         playPortalAnimation(location) {
             val headStack = createCustomHead(CHEST_TEXTURE)
-            val itemDisplay = world.spawn(location.clone().add(0.5, 0.0, 0.5), ItemDisplay::class.java) {
+            val itemDisplay = world.spawn(location.clone().add(0.5, 0.25, 0.5), ItemDisplay::class.java) {
                 it.itemStack = headStack
                 it.billboard = Billboard.FIXED
                 it.transformation = Transformation(
@@ -216,9 +322,9 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
                 )
             }
 
-            val interaction = world.spawn(location.clone().add(0.5, 0.5, 0.5), Interaction::class.java) {
-                it.interactionHeight = 1.0f
-                it.interactionWidth = 1.2f
+            val interaction = world.spawn(itemDisplay.location, Interaction::class.java) {
+                it.interactionHeight = 0.6f
+                it.interactionWidth = 0.6f
             }
 
             val holograms = spawnHolograms(location, rarity)
@@ -232,28 +338,45 @@ class TreasuresModule(private val plugin: SurvivalPlus) : Module, Listener {
 
                 location.world.playSound(location, Sound.BLOCK_CHEST_LOCKED, 1.0f, 1.0f)
 
+                val spawnParticle = when (rarity.lowercase()) {
+                    "rare" -> Particle.CRIT
+                    "epic" -> Particle.CRIT
+                    "legendary" -> Particle.CRIT
+                    "mythic" -> Particle.CRIT
+                    else -> Particle.CRIT
+                }
+
                 object : BukkitRunnable() {
                     var ticks = 0
-                    val duration = 30 // ticks for jump and roll
+                    val duration = 40 // Longer for a better feel
                     override fun run() {
                         if (ticks > duration) {
+                            // Ensure final state is correct
+                            itemDisplay.transformation = Transformation(
+                                Vector3f(0f, 0f, 0f),
+                                AxisAngle4f(),
+                                Vector3f(0.6f, 0.6f, 0.6f),
+                                AxisAngle4f()
+                            )
                             this.cancel()
                             return
                         }
                         val progress = ticks.toDouble() / duration
-                        val scale = (2.0 * progress).toFloat()
-                        val yOffset = (0.5 * progress) + (Math.sin(progress * Math.PI) * 0.5)
-                        val rollAngle = (progress * 360).toFloat()
+                        val scale = (0.6 * progress).toFloat()
+
+                        // Double bounce
+                        val yOffset = (Math.abs(Math.sin(progress * Math.PI * 2)) * (1 - progress) * 0.7).toFloat()
+                        val rollAngle = (progress * 360 * 2).toFloat() // Spin twice
 
                         itemDisplay.transformation = Transformation(
-                            Vector3f(0f, yOffset.toFloat(), 0f),
-                            AxisAngle4f(Math.toRadians(rollAngle.toDouble()).toFloat(), 1f, 0f, 0f),
+                            Vector3f(0f, yOffset, 0f),
+                            AxisAngle4f(Math.toRadians(rollAngle.toDouble()).toFloat(), 0f, 1f, 0f),
                             Vector3f(scale, scale, scale),
-                            AxisAngle4f(0f, 0f, 0f, 1f)
+                            AxisAngle4f()
                         )
 
-                        if (ticks % 4 == 0) {
-                            world.spawnParticle(Particle.FIREWORK, location.clone().add(0.5, 0.5, 0.5), 1, 0.1, 0.1, 0.1, 0.0)
+                        if (ticks % 2 == 0) {
+                            world.spawnParticle(spawnParticle, itemDisplay.location, 1, 0.2, 0.2, 0.2, 0.0)
                         }
 
                         ticks++
